@@ -1,7 +1,9 @@
 package api
 
 import (
+	"job-executor/internal/broadcast"
 	"job-executor/internal/models"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -254,8 +256,7 @@ func (api *API) StreamJob(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Headers", "Cache-Control")
+	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering if applicable
 
 	// Send initial job status
 	var job models.Job
@@ -273,6 +274,7 @@ func (api *API) StreamJob(c *gin.Context) {
 	response.CalculateDuration()
 
 	// Send initial status
+	slog.Info("Starting SSE stream for job", "job_id", jobID, "status", job.Status)
 	c.SSEvent("status", response)
 	c.Writer.Flush()
 
@@ -280,6 +282,13 @@ func (api *API) StreamJob(c *gin.Context) {
 	if job.Status == models.StatusCompleted || job.Status == models.StatusFailed || job.Status == models.StatusCanceled {
 		c.SSEvent("complete", response)
 		return
+	}
+
+	// Subscribe to real-time output if job is running
+	var outputChan chan broadcast.OutputEvent
+	if job.Status == models.StatusRunning {
+		outputChan = broadcast.GlobalBroadcaster.Subscribe(jobID)
+		defer broadcast.GlobalBroadcaster.Unsubscribe(jobID, outputChan)
 	}
 
 	// Poll for updates every 500ms for running/queued jobs
@@ -293,6 +302,12 @@ func (api *API) StreamJob(c *gin.Context) {
 		select {
 		case <-clientGone:
 			return
+		
+		case outputEvent := <-outputChan:
+			// Send real-time output event
+			c.SSEvent("output", outputEvent)
+			c.Writer.Flush()
+			
 		case <-ticker.C:
 			// Fetch updated job status
 			if err := api.db.Preload("Server").First(&job, "id = ?", jobID).Error; err != nil {
@@ -304,13 +319,21 @@ func (api *API) StreamJob(c *gin.Context) {
 			response.CalculateDuration()
 
 			// Send status update
+			slog.Info("Sending SSE status update", "job_id", jobID, "status", job.Status)
 			c.SSEvent("status", response)
 			c.Writer.Flush()
 
 			// If job finished, send complete event and stop streaming
 			if job.Status == models.StatusCompleted || job.Status == models.StatusFailed || job.Status == models.StatusCanceled {
+				slog.Info("Job finished, sending complete event", "job_id", jobID, "status", job.Status)
 				c.SSEvent("complete", response)
 				return
+			}
+
+			// If job just started running and we don't have an output channel yet, subscribe
+			if job.Status == models.StatusRunning && outputChan == nil {
+				outputChan = broadcast.GlobalBroadcaster.Subscribe(jobID)
+				defer broadcast.GlobalBroadcaster.Unsubscribe(jobID, outputChan)
 			}
 		}
 	}

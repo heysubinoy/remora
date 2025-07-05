@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"job-executor/internal/broadcast"
 	"job-executor/internal/config"
 	"job-executor/internal/models"
 	"job-executor/internal/queue"
@@ -134,8 +135,43 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 		"job_id", job.ID, 
 		"timeout", timeout)
 
-	// Execute command via SSH
-	result, err := sshClient.Execute(jobCtx, fullCommand, timeout)
+	// Track output for database storage
+	var outputBuilder strings.Builder
+	var errorBuilder strings.Builder
+	var lineCount int
+
+	// Streaming callback for real-time output
+	streamCallback := func(output string, isStderr bool) {
+		lineCount++
+		
+		// Store in builders for final database update
+		if isStderr {
+			errorBuilder.WriteString(output)
+		} else {
+			outputBuilder.WriteString(output)
+		}
+
+		// Broadcast to SSE clients if there are subscribers
+		if broadcast.GlobalBroadcaster.HasSubscribers(job.ID) {
+			broadcast.GlobalBroadcaster.Broadcast(job.ID, output, isStderr, lineCount)
+			
+			// Also update the job's output field incrementally for live monitoring
+			if isStderr {
+				job.Stderr = errorBuilder.String()
+			} else {
+				job.Stdout = outputBuilder.String()
+				job.Output = outputBuilder.String() // Keep for backward compatibility
+			}
+			
+			// Update job in database periodically (every 10 lines or every 2 seconds)
+			if lineCount%10 == 0 {
+				w.updateJob(job)
+			}
+		}
+	}
+
+	// Execute command via SSH with streaming
+	result, err := sshClient.ExecuteStreaming(jobCtx, fullCommand, timeout, streamCallback)
 
 	// Update job with results
 	finishedAt := time.Now()
@@ -158,11 +194,14 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 		}
 		job.Error = err.Error()
 	} else {
-		// Store both stdout and stderr separately and combined
-		job.Output = result.Output  // Keep for backward compatibility
-		job.Stdout = result.Output
-		job.Stderr = result.Error
-		job.Error = result.Error   // Keep for backward compatibility
+		// Store the accumulated output from streaming
+		finalOutput := outputBuilder.String()
+		finalError := errorBuilder.String()
+		
+		job.Output = finalOutput  // Keep for backward compatibility
+		job.Stdout = finalOutput
+		job.Stderr = finalError
+		job.Error = finalError   // Keep for backward compatibility
 		job.ExitCode = &result.ExitCode
 
 		if result.ExitCode == 0 {
@@ -171,21 +210,21 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 				"job_id", job.ID, 
 				"exit_code", result.ExitCode,
 				"duration", duration,
-				"stdout_length", len(result.Output),
-				"stderr_length", len(result.Error))
+				"stdout_length", len(finalOutput),
+				"stderr_length", len(finalError))
 		} else {
 			job.Status = models.StatusFailed
 			slog.Warn("Job completed with non-zero exit code", 
 				"job_id", job.ID, 
 				"exit_code", result.ExitCode,
 				"duration", duration,
-				"stdout_length", len(result.Output),
-				"stderr_length", len(result.Error))
+				"stdout_length", len(finalOutput),
+				"stderr_length", len(finalError))
 		}
 
 		// Log output summary (first 200 chars) for debugging
-		if len(result.Output) > 0 {
-			outputSummary := result.Output
+		if len(finalOutput) > 0 {
+			outputSummary := finalOutput
 			if len(outputSummary) > 200 {
 				outputSummary = outputSummary[:200] + "..."
 			}
@@ -194,8 +233,8 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 				"stdout_preview", outputSummary)
 		}
 
-		if len(result.Error) > 0 {
-			errorSummary := result.Error
+		if len(finalError) > 0 {
+			errorSummary := finalError
 			if len(errorSummary) > 200 {
 				errorSummary = errorSummary[:200] + "..."
 			}

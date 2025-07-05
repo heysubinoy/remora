@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { LiveJobViewer } from "@/components/live-job-viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
@@ -989,175 +990,12 @@ export default function JobExecutionDashboard() {
         </Tabs>
       </div>
 
-      {/* Job Viewer Modal */}
-      <Dialog open={isJobViewerOpen} onOpenChange={setIsJobViewerOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Terminal className="w-5 h-5" />
-              Job Details - {selectedJobId?.slice(0, 8)}...
-            </DialogTitle>
-            <DialogDescription>
-              Command execution logs and details
-            </DialogDescription>
-          </DialogHeader>
-
-          {jobDetailsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              <span className="ml-2">Loading job details...</span>
-            </div>
-          ) : selectedJob && selectedJobLogs ? (
-            <div className="space-y-4">
-              {/* Job Metadata */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <Label className="text-xs text-gray-500">Server</Label>
-                  <p className="font-medium">
-                    {selectedJob.server?.name || "Unknown"}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-500">Command</Label>
-                  <p className="font-mono text-sm">
-                    {selectedJob.command} {selectedJob.args}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-500">Status</Label>
-                  <div className="mt-1">
-                    {getStatusBadge(selectedJob.status)}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-500">Duration</Label>
-                  <p className="font-medium">
-                    {selectedJob.duration
-                      ? formatDuration(selectedJob.duration)
-                      : "Running..."}
-                  </p>
-                </div>
-              </div>
-
-              {/* Log Tabs */}
-              <Tabs defaultValue="stdout" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="stdout">
-                    stdout ({selectedJobLogs.metadata.stdout_length} chars)
-                  </TabsTrigger>
-                  <TabsTrigger value="stderr">
-                    stderr ({selectedJobLogs.metadata.stderr_length} chars)
-                  </TabsTrigger>
-                  <TabsTrigger value="info">Info</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="stdout">
-                  <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm">
-                    <ScrollArea className="h-64">
-                      {selectedJobLogs.stdout ? (
-                        <pre className="whitespace-pre-wrap">
-                          {selectedJobLogs.stdout}
-                        </pre>
-                      ) : (
-                        <div className="text-gray-500 italic">
-                          No stdout output
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="stderr">
-                  <div className="bg-gray-900 text-red-400 p-4 rounded-lg font-mono text-sm">
-                    <ScrollArea className="h-64">
-                      {selectedJobLogs.stderr ? (
-                        <pre className="whitespace-pre-wrap">
-                          {selectedJobLogs.stderr}
-                        </pre>
-                      ) : (
-                        <div className="text-gray-500 italic">
-                          No stderr output
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="info">
-                  <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-xs text-gray-500">Started</Label>
-                        <p className="text-sm">
-                          {formatTimestamp(selectedJobLogs.started_at)}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">
-                          Finished
-                        </Label>
-                        <p className="text-sm">
-                          {formatTimestamp(selectedJobLogs.finished_at)}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">
-                          Exit Code
-                        </Label>
-                        <p className="text-sm">
-                          {selectedJobLogs.exit_code !== null ? (
-                            <Badge
-                              className={
-                                selectedJobLogs.exit_code === 0
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
-                              }
-                            >
-                              {selectedJobLogs.exit_code}
-                            </Badge>
-                          ) : (
-                            "-"
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-gray-500">Timeout</Label>
-                        <p className="text-sm">{selectedJobLogs.timeout}s</p>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-
-              {/* Action Buttons */}
-              <div className="flex justify-between">
-                <div className="flex gap-2">
-                  {(selectedJob.status === "running" ||
-                    selectedJob.status === "queued") && (
-                    <Button
-                      variant="destructive"
-                      onClick={() => handleCancelJob(selectedJob.id)}
-                    >
-                      <Square className="w-4 h-4 mr-2" />
-                      Cancel Job
-                    </Button>
-                  )}
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsJobViewerOpen(false)}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-gray-500 py-8">
-              Failed to load job details
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Live Job Viewer */}
+      <LiveJobViewer
+        jobId={selectedJobId}
+        isOpen={isJobViewerOpen}
+        onClose={() => setIsJobViewerOpen(false)}
+      />
     </div>
   );
 }

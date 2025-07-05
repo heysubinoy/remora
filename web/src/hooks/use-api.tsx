@@ -262,21 +262,53 @@ export function useJob(jobId: string | null) {
       return;
     }
 
+    console.log("Starting SSE for job:", jobId, "with status:", job.status);
     const eventSource = createJobStream(jobId);
 
-    eventSource.onmessage = (event) => {
+    // Handle status updates
+    eventSource.addEventListener("status", (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.status) {
-          setJob(data);
-        }
+        const messageEvent = event as MessageEvent;
+        const data = JSON.parse(messageEvent.data);
+        console.log("SSE Status update:", data);
+        setJob(data);
       } catch (err) {
-        console.error("Error parsing SSE data:", err);
+        console.error("Error parsing SSE status data:", err);
       }
+    });
+
+    // Handle completion
+    eventSource.addEventListener("complete", (event) => {
+      try {
+        const messageEvent = event as MessageEvent;
+        const data = JSON.parse(messageEvent.data);
+        console.log("SSE Job complete:", data);
+        setJob(data);
+        eventSource.close();
+      } catch (err) {
+        console.error("Error parsing SSE complete data:", err);
+      }
+    });
+
+    // Handle errors
+    eventSource.addEventListener("error", (event) => {
+      try {
+        const messageEvent = event as MessageEvent;
+        const data = JSON.parse(messageEvent.data);
+        console.error("SSE Job error:", data);
+        setError(data.error || "Job error occurred");
+        eventSource.close();
+      } catch (err) {
+        console.error("Error parsing SSE error data:", err);
+      }
+    });
+
+    eventSource.onopen = () => {
+      console.log("SSE connection opened for job:", jobId);
     };
 
     eventSource.onerror = (err) => {
-      console.error("SSE error:", err);
+      console.error("SSE connection error:", err);
       eventSource.close();
     };
 
