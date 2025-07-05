@@ -23,10 +23,13 @@ type Job struct {
 	Args      string    `json:"args"`
 	ServerID  string    `json:"server_id"`
 	Status    JobStatus `json:"status" gorm:"default:queued"`
-	Output    string    `json:"output"`
-	Error     string    `json:"error"`
+	Output    string    `json:"output" gorm:"type:text"`    // stdout - using TEXT for large outputs
+	Error     string    `json:"error" gorm:"type:text"`     // stderr - using TEXT for large outputs
+	Stdout    string    `json:"stdout" gorm:"type:text"`    // explicit stdout field
+	Stderr    string    `json:"stderr" gorm:"type:text"`    // explicit stderr field
 	ExitCode  *int      `json:"exit_code"`
 	Timeout   int       `json:"timeout" gorm:"default:300"` // timeout in seconds
+	LogLevel  string    `json:"log_level" gorm:"default:info"` // log level for this job
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	StartedAt *time.Time `json:"started_at"`

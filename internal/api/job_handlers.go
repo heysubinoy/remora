@@ -136,13 +136,76 @@ func (api *API) GetJobLogs(c *gin.Context) {
 		return
 	}
 
+	// Calculate execution duration if available
+	var duration *time.Duration
+	if job.StartedAt != nil && job.FinishedAt != nil {
+		d := job.FinishedAt.Sub(*job.StartedAt)
+		duration = &d
+	}
+
 	logs := gin.H{
-		"job_id": job.ID,
-		"output": job.Output,
-		"error":  job.Error,
+		"job_id":      job.ID,
+		"status":      job.Status,
+		"command":     job.Command,
+		"args":        job.Args,
+		"exit_code":   job.ExitCode,
+		"output":      job.Output,     // Combined output (backward compatibility)
+		"error":       job.Error,      // Combined error (backward compatibility)
+		"stdout":      job.Stdout,     // Explicit stdout
+		"stderr":      job.Stderr,     // Explicit stderr
+		"started_at":  job.StartedAt,
+		"finished_at": job.FinishedAt,
+		"duration":    duration,
+		"timeout":     job.Timeout,
+		"created_at":  job.CreatedAt,
+		"updated_at":  job.UpdatedAt,
+	}
+
+	// Add metadata about log sizes
+	logs["metadata"] = gin.H{
+		"stdout_length": len(job.Stdout),
+		"stderr_length": len(job.Stderr),
+		"has_output":    len(job.Stdout) > 0,
+		"has_errors":    len(job.Stderr) > 0,
 	}
 
 	c.JSON(http.StatusOK, logs)
+}
+
+func (api *API) GetJobStdout(c *gin.Context) {
+	jobID := c.Param("id")
+
+	var job models.Job
+	if err := api.db.First(&job, "id = ?", jobID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch job"})
+		return
+	}
+
+	// Return stdout as plain text for easier consumption
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.String(http.StatusOK, job.Stdout)
+}
+
+func (api *API) GetJobStderr(c *gin.Context) {
+	jobID := c.Param("id")
+
+	var job models.Job
+	if err := api.db.First(&job, "id = ?", jobID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch job"})
+		return
+	}
+
+	// Return stderr as plain text for easier consumption
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.String(http.StatusOK, job.Stderr)
 }
 
 func (api *API) ListJobs(c *gin.Context) {

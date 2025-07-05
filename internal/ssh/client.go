@@ -27,6 +27,8 @@ func NewClient(cfg *config.SSHConfig) *Client {
 }
 
 func (c *Client) Execute(ctx context.Context, command string, timeout time.Duration) (*ExecutionResult, error) {
+	startTime := time.Now()
+	
 	// Create SSH client config
 	sshConfig := &ssh.ClientConfig{
 		User:            c.config.User,
@@ -67,7 +69,7 @@ func (c *Client) Execute(ctx context.Context, command string, timeout time.Durat
 	addr := fmt.Sprintf("%s:%s", c.config.Host, c.config.Port)
 	conn, err := ssh.Dial("tcp", addr, sshConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to SSH server: %w", err)
+		return nil, fmt.Errorf("failed to connect to SSH server at %s: %w", addr, err)
 	}
 	defer conn.Close()
 
@@ -78,8 +80,11 @@ func (c *Client) Execute(ctx context.Context, command string, timeout time.Durat
 	}
 	defer session.Close()
 
-	// Setup output buffers
+	// Setup output buffers with larger initial capacity for better performance
 	var stdout, stderr bytes.Buffer
+	stdout.Grow(4096)  // Pre-allocate 4KB
+	stderr.Grow(1024)  // Pre-allocate 1KB
+	
 	session.Stdout = &stdout
 	session.Stderr = &stderr
 
@@ -91,6 +96,8 @@ func (c *Client) Execute(ctx context.Context, command string, timeout time.Durat
 
 	select {
 	case err := <-done:
+		executionTime := time.Since(startTime)
+		
 		result := &ExecutionResult{
 			Output: stdout.String(),
 			Error:  stderr.String(),
@@ -100,7 +107,7 @@ func (c *Client) Execute(ctx context.Context, command string, timeout time.Durat
 			if exitError, ok := err.(*ssh.ExitError); ok {
 				result.ExitCode = exitError.ExitStatus()
 			} else {
-				return nil, fmt.Errorf("command execution failed: %w", err)
+				return nil, fmt.Errorf("command execution failed after %v: %w", executionTime, err)
 			}
 		}
 
@@ -108,10 +115,12 @@ func (c *Client) Execute(ctx context.Context, command string, timeout time.Durat
 
 	case <-ctx.Done():
 		session.Signal(ssh.SIGKILL)
-		return nil, fmt.Errorf("command execution timeout: %w", ctx.Err())
+		executionTime := time.Since(startTime)
+		return nil, fmt.Errorf("command execution canceled after %v: %w", executionTime, ctx.Err())
 
 	case <-time.After(timeout):
 		session.Signal(ssh.SIGKILL)
-		return nil, fmt.Errorf("command execution timeout after %v", timeout)
+		executionTime := time.Since(startTime)
+		return nil, fmt.Errorf("command execution timeout after %v (limit: %v)", executionTime, timeout)
 	}
 }

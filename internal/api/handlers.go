@@ -25,6 +25,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *wo
 		v1.GET("/jobs/:id", api.GetJob)
 		v1.POST("/jobs/:id/cancel", api.CancelJob)
 		v1.GET("/jobs/:id/logs", api.GetJobLogs)
+		v1.GET("/jobs/:id/stdout", api.GetJobStdout)
+		v1.GET("/jobs/:id/stderr", api.GetJobStderr)
 		v1.GET("/jobs/:id/stream", api.StreamJob)
 		v1.GET("/jobs", api.ListJobs)
 
