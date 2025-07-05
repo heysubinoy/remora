@@ -25,6 +25,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *wo
 		v1.GET("/jobs/:id", api.GetJob)
 		v1.POST("/jobs/:id/cancel", api.CancelJob)
 		v1.GET("/jobs/:id/logs", api.GetJobLogs)
+		v1.GET("/jobs/:id/stream", api.StreamJob)
 		v1.GET("/jobs", api.ListJobs)
 
 		// Server configuration routes
@@ -39,5 +40,11 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *wo
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
+	})
+
+	// Serve the web interface
+	router.Static("/web", "./web")
+	router.GET("/", func(c *gin.Context) {
+		c.File("./web/index.html")
 	})
 }

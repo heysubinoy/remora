@@ -3,6 +3,7 @@ package api
 import (
 	"job-executor/internal/models"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -52,7 +53,7 @@ func (api *API) SubmitJob(c *gin.Context) {
 		job.Status = models.StatusFailed
 		job.Error = "Failed to queue job: " + err.Error()
 		api.db.Save(job)
-		
+
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Job queue is full"})
 		return
 	}
@@ -63,7 +64,7 @@ func (api *API) SubmitJob(c *gin.Context) {
 
 func (api *API) GetJob(c *gin.Context) {
 	jobID := c.Param("id")
-	
+
 	var job models.Job
 	if err := api.db.Preload("Server").First(&job, "id = ?", jobID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -76,13 +77,13 @@ func (api *API) GetJob(c *gin.Context) {
 
 	response := &models.JobResponse{Job: job}
 	response.CalculateDuration()
-	
+
 	c.JSON(http.StatusOK, response)
 }
 
 func (api *API) CancelJob(c *gin.Context) {
 	jobID := c.Param("id")
-	
+
 	var job models.Job
 	if err := api.db.First(&job, "id = ?", jobID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -124,7 +125,7 @@ func (api *API) CancelJob(c *gin.Context) {
 
 func (api *API) GetJobLogs(c *gin.Context) {
 	jobID := c.Param("id")
-	
+
 	var job models.Job
 	if err := api.db.First(&job, "id = ?", jobID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -146,7 +147,7 @@ func (api *API) GetJobLogs(c *gin.Context) {
 
 func (api *API) ListJobs(c *gin.Context) {
 	var jobs []models.Job
-	
+
 	// Get query parameters for pagination
 	page := c.DefaultQuery("page", "1")
 	limit := c.DefaultQuery("limit", "10")
@@ -154,11 +155,11 @@ func (api *API) ListJobs(c *gin.Context) {
 	serverID := c.Query("server_id")
 
 	query := api.db.Model(&models.Job{}).Preload("Server")
-	
+
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
-	
+
 	if serverID != "" {
 		query = query.Where("server_id = ?", serverID)
 	}
@@ -181,4 +182,73 @@ func (api *API) ListJobs(c *gin.Context) {
 		"page":  page,
 		"limit": limit,
 	})
+}
+
+func (api *API) StreamJob(c *gin.Context) {
+	jobID := c.Param("id")
+
+	// Set headers for Server-Sent Events
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Allow-Headers", "Cache-Control")
+
+	// Send initial job status
+	var job models.Job
+	if err := api.db.Preload("Server").First(&job, "id = ?", jobID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.SSEvent("error", gin.H{"error": "Job not found"})
+			return
+		}
+		c.SSEvent("error", gin.H{"error": "Failed to fetch job"})
+		return
+	}
+
+	// Calculate duration if available
+	response := &models.JobResponse{Job: job}
+	response.CalculateDuration()
+
+	// Send initial status
+	c.SSEvent("status", response)
+	c.Writer.Flush()
+
+	// If job is already finished, send complete event and return
+	if job.Status == models.StatusCompleted || job.Status == models.StatusFailed || job.Status == models.StatusCanceled {
+		c.SSEvent("complete", response)
+		return
+	}
+
+	// Poll for updates every 500ms for running/queued jobs
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	// Create a channel to detect client disconnect
+	clientGone := c.Writer.CloseNotify()
+
+	for {
+		select {
+		case <-clientGone:
+			return
+		case <-ticker.C:
+			// Fetch updated job status
+			if err := api.db.Preload("Server").First(&job, "id = ?", jobID).Error; err != nil {
+				c.SSEvent("error", gin.H{"error": "Failed to fetch job update"})
+				return
+			}
+
+			response := &models.JobResponse{Job: job}
+			response.CalculateDuration()
+
+			// Send status update
+			c.SSEvent("status", response)
+			c.Writer.Flush()
+
+			// If job finished, send complete event and stop streaming
+			if job.Status == models.StatusCompleted || job.Status == models.StatusFailed || job.Status == models.StatusCanceled {
+				c.SSEvent("complete", response)
+				return
+			}
+		}
+	}
 }
