@@ -15,6 +15,7 @@ import (
 	"job-executor/internal/queue"
 	"job-executor/internal/worker"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -50,6 +51,29 @@ func main() {
 	// Initialize HTTP server
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
+
+	// Configure CORS middleware
+	corsConfig := cors.Config{
+		AllowOrigins: []string{
+			"http://localhost:3000",  // Next.js dev server
+			"http://127.0.0.1:3000",
+			"http://localhost:8080",  // Backend server (for web interface)
+			"http://127.0.0.1:8080",
+		},
+		AllowMethods: []string{
+			"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Origin", "Content-Length", "Content-Type", "Authorization",
+			"Accept", "X-Requested-With", "Cache-Control",
+		},
+		ExposeHeaders: []string{
+			"Content-Length", "Content-Type",
+		},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
+	router.Use(cors.New(corsConfig))
 
 	// Setup API routes
 	api.SetupRoutes(router, db, jobQueue, jobWorker)

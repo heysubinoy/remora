@@ -85,3 +85,40 @@ tmp/
 
 # Delve debugger
 __debug_bin
+
+# Next.js Frontend
+web/src/.next/
+web/src/out/
+web/src/node_modules/
+web/src/.env*.local
+web/src/.vercel
+web/src/*.tsbuildinfo
+web/src/next-env.d.ts
+
+# Next.js build outputs
+web/src/build/
+web/src/dist/
+
+# Next.js cache
+web/src/.next/
+web/src/.swc/
+
+# Package manager files
+web/src/package-lock.json
+web/src/yarn.lock
+web/src/pnpm-lock.yaml
+
+# TypeScript
+web/src/*.tsbuildinfo
+
+# ESLint
+web/src/.eslintcache
+
+# Turbo
+web/src/.turbo/
+
+# Local env files for Next.js
+web/src/.env.local
+web/src/.env.development.local
+web/src/.env.test.local
+web/src/.env.production.local
