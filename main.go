@@ -52,7 +52,7 @@ func main() {
 	router.Use(gin.Logger(), gin.Recovery())
 
 	// Setup API routes
-	api.SetupRoutes(router, db, jobQueue)
+	api.SetupRoutes(router, db, jobQueue, jobWorker)
 
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,

@@ -9,24 +9,24 @@ import (
 	"job-executor/internal/ssh"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
 )
 
 type Worker struct {
-	db       *gorm.DB
-	queue    *queue.Queue
-	sshClient *ssh.Client
-	running  map[string]context.CancelFunc
+	db      *gorm.DB
+	queue   *queue.Queue
+	running map[string]context.CancelFunc
+	mu      sync.RWMutex
 }
 
 func New(db *gorm.DB, queue *queue.Queue, sshConfig config.SSHConfig) *Worker {
 	return &Worker{
-		db:        db,
-		queue:     queue,
-		sshClient: ssh.NewClient(&sshConfig),
-		running:   make(map[string]context.CancelFunc),
+		db:      db,
+		queue:   queue,
+		running: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -58,7 +58,37 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	defer cancel()
 
 	// Store cancel function for potential cancellation
+	w.mu.Lock()
 	w.running[job.ID] = cancel
+	w.mu.Unlock()
+
+	// Fetch server configuration for this job
+	var server models.Server
+	if err := w.db.First(&server, "id = ?", job.ServerID).Error; err != nil {
+		finishedAt := time.Now()
+		job.Status = models.StatusFailed
+		job.Error = fmt.Sprintf("Failed to fetch server configuration: %v", err)
+		job.FinishedAt = &finishedAt
+		w.updateJob(job)
+		w.removeRunningJob(job.ID)
+		return
+	}
+
+	// Create SSH client with server configuration
+	sshConfig := &config.SSHConfig{
+		Host:       server.Hostname,
+		Port:       fmt.Sprintf("%d", server.Port),
+		User:       server.User,
+		Password:   server.Password,
+		PrivateKey: server.PrivateKey,
+	}
+	
+	// Use PEM file if provided
+	if server.PemFile != "" {
+		sshConfig.PrivateKey = server.PemFile
+	}
+
+	sshClient := ssh.NewClient(sshConfig)
 
 	// Build full command
 	fullCommand := job.Command
@@ -73,14 +103,14 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	}
 
 	// Execute command via SSH
-	result, err := w.sshClient.Execute(jobCtx, fullCommand, timeout)
+	result, err := sshClient.Execute(jobCtx, fullCommand, timeout)
 
 	// Update job with results
 	finishedAt := time.Now()
 	job.FinishedAt = &finishedAt
 
 	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context canceled") {
 			job.Status = models.StatusCanceled
 		} else {
 			job.Status = models.StatusFailed
@@ -100,9 +130,7 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	}
 
 	w.updateJob(job)
-
-	// Remove from running jobs
-	delete(w.running, job.ID)
+	w.removeRunningJob(job.ID)
 }
 
 func (w *Worker) updateJob(job *models.Job) {
@@ -112,7 +140,11 @@ func (w *Worker) updateJob(job *models.Job) {
 }
 
 func (w *Worker) CancelJob(jobID string) error {
-	if cancel, exists := w.running[jobID]; exists {
+	w.mu.RLock()
+	cancel, exists := w.running[jobID]
+	w.mu.RUnlock()
+	
+	if exists {
 		cancel()
 		
 		// Update job status in database
@@ -129,4 +161,10 @@ func (w *Worker) CancelJob(jobID string) error {
 	}
 	
 	return fmt.Errorf("job %s is not currently running", jobID)
+}
+
+func (w *Worker) removeRunningJob(jobID string) {
+	w.mu.Lock()
+	delete(w.running, jobID)
+	w.mu.Unlock()
 }

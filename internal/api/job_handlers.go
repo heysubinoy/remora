@@ -99,12 +99,23 @@ func (api *API) CancelJob(c *gin.Context) {
 		return
 	}
 
-	// For now, we'll just update the status in database
-	// In a real implementation, we'd need to signal the worker to cancel
-	job.Status = models.StatusCanceled
-	if err := api.db.Save(&job).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel job"})
-		return
+	// Try to cancel running job first
+	if job.Status == models.StatusRunning {
+		if err := api.worker.CancelJob(jobID); err != nil {
+			// If cancellation fails, still update status in database
+			job.Status = models.StatusCanceled
+			if err := api.db.Save(&job).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel job"})
+				return
+			}
+		}
+	} else {
+		// For queued jobs, just update the status
+		job.Status = models.StatusCanceled
+		if err := api.db.Save(&job).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel job"})
+			return
+		}
 	}
 
 	response := &models.JobResponse{Job: job}

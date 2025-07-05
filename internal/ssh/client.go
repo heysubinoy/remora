@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"job-executor/internal/config"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -39,9 +40,19 @@ func (c *Client) Execute(ctx context.Context, command string, timeout time.Durat
 	}
 
 	if c.config.PrivateKey != "" {
-		key, err := ioutil.ReadFile(c.config.PrivateKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read private key: %w", err)
+		var key []byte
+		var err error
+		
+		// Check if it's a file path or the key content itself
+		if strings.HasPrefix(c.config.PrivateKey, "-----BEGIN") {
+			// It's the actual key content
+			key = []byte(c.config.PrivateKey)
+		} else {
+			// It's a file path
+			key, err = ioutil.ReadFile(c.config.PrivateKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read private key file: %w", err)
+			}
 		}
 
 		signer, err := ssh.ParsePrivateKey(key)

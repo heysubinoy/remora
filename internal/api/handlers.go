@@ -2,6 +2,7 @@ package api
 
 import (
 	"job-executor/internal/queue"
+	"job-executor/internal/worker"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,12 +10,13 @@ import (
 )
 
 type API struct {
-	db    *gorm.DB
-	queue *queue.Queue
+	db     *gorm.DB
+	queue  *queue.Queue
+	worker *worker.Worker
 }
 
-func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue) {
-	api := &API{db: db, queue: queue}
+func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *worker.Worker) {
+	api := &API{db: db, queue: queue, worker: worker}
 
 	v1 := router.Group("/api/v1")
 	{
