@@ -310,12 +310,7 @@ export default function JobExecutionDashboard() {
               onValueChange={handleJobValueChange}
               onSubmit={handleSubmitJob}
             />
-            <JobList
-              jobs={jobs}
-              loading={jobsLoading}
-              onViewJob={handleViewJob}
-              onCancelJob={handleCancelJob}
-            />
+            <JobList onViewJob={handleViewJob} />
           </TabsContent>
 
           {/* Servers Tab */}

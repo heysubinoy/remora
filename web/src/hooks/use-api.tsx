@@ -164,8 +164,8 @@ export function useJobs(filters?: { status?: string; server_id?: string }) {
   const submitJob = useCallback(
     async (jobData: JobRequest): Promise<boolean> => {
       try {
-        setError(null);
         const newJob = await jobAPI.submit(jobData);
+        setError(null);
         setJobs((prev) => [newJob, ...prev]);
         return true;
       } catch (err) {
@@ -194,6 +194,41 @@ export function useJobs(filters?: { status?: string; server_id?: string }) {
     }
   }, []);
 
+  // Lightweight status check that only updates changed jobs
+  const checkJobStatusUpdates = useCallback(async () => {
+    try {
+      const response = await jobAPI.list({
+        limit: "50",
+        ...filters,
+      });
+      const newJobs = response.jobs || [];
+
+      setJobs((prevJobs) => {
+        // Check if any job status actually changed
+        const hasChanges = newJobs.some((newJob) => {
+          const existingJob = prevJobs.find((j) => j.id === newJob.id);
+          return (
+            existingJob &&
+            (existingJob.status !== newJob.status ||
+              existingJob.exit_code !== newJob.exit_code ||
+              existingJob.duration !== newJob.duration)
+          );
+        });
+
+        // Only update if there are actual changes
+        if (hasChanges) {
+          console.log("Job status changes detected, updating...");
+          return newJobs;
+        }
+
+        // No changes, return previous jobs to prevent re-render
+        return prevJobs;
+      });
+    } catch (err) {
+      console.error("Error checking job status updates:", err);
+    }
+  }, [filters]);
+
   // Auto-refresh jobs every 5 seconds for running/queued jobs
   useEffect(() => {
     const hasActiveJobs = jobs.some(
@@ -203,11 +238,11 @@ export function useJobs(filters?: { status?: string; server_id?: string }) {
     if (!hasActiveJobs) return;
 
     const interval = setInterval(() => {
-      fetchJobs();
+      checkJobStatusUpdates();
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [jobs, fetchJobs]);
+  }, [jobs, checkJobStatusUpdates]);
 
   useEffect(() => {
     fetchJobs();

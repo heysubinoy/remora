@@ -39,20 +39,14 @@ import {
   Clock,
 } from "lucide-react";
 import { Job as APIJob, formatDuration, formatTimestamp } from "@/lib/api";
+import { useJobs } from "@/hooks/use-api";
 
 interface JobListProps {
-  jobs: APIJob[];
-  loading: boolean;
   onViewJob: (job: APIJob) => void;
-  onCancelJob: (jobId: string) => void;
 }
 
-export function JobList({
-  jobs,
-  loading,
-  onViewJob,
-  onCancelJob,
-}: JobListProps) {
+export function JobList({ onViewJob }: JobListProps) {
+  const { jobs, loading, submitJob, cancelJob } = useJobs();
   const getStatusBadge = (status: string) => {
     const variants = {
       queued: "bg-blue-100 text-blue-800 border-blue-200",
@@ -197,7 +191,7 @@ export function JobList({
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => onCancelJob(job.id)}
+                                  onClick={() => cancelJob(job.id)}
                                 >
                                   Yes, Cancel Job
                                 </AlertDialogAction>
