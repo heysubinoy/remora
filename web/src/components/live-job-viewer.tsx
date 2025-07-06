@@ -214,8 +214,21 @@ export function LiveJobViewer({ jobId, isOpen, onClose }: LiveJobViewerProps) {
             </div>
 
             {/* Live Logs */}
-            <Tabs defaultValue={job.status === "running" || job.status === "queued" ? "live" : "stdout"} className="flex-1 flex flex-col">
-              <TabsList className={`grid w-full ${job.status === "running" || job.status === "queued" ? "grid-cols-4" : "grid-cols-3"}`}>
+            <Tabs
+              defaultValue={
+                job.status === "running" || job.status === "queued"
+                  ? "live"
+                  : "stdout"
+              }
+              className="flex-1 flex flex-col"
+            >
+              <TabsList
+                className={`grid w-full ${
+                  job.status === "running" || job.status === "queued"
+                    ? "grid-cols-4"
+                    : "grid-cols-3"
+                }`}
+              >
                 {(job.status === "running" || job.status === "queued") && (
                   <TabsTrigger value="live" className="flex items-center gap-2">
                     Live Output
@@ -246,7 +259,7 @@ export function LiveJobViewer({ jobId, isOpen, onClose }: LiveJobViewerProps) {
               {/* Live Output Tab - Only for running/queued jobs */}
               {(job.status === "running" || job.status === "queued") && (
                 <TabsContent value="live" className="flex-1">
-                  <LiveOutputViewer 
+                  <LiveOutputViewer
                     job={job}
                     logs={logs}
                     isConnected={isConnected}

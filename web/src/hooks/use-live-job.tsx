@@ -141,10 +141,10 @@ export function useLiveJob(
           setState((prev) => {
             const currentOutput = prev.logs.output || "";
             const currentError = prev.logs.error || "";
-            
+
             // Append new output to existing content
             const newContent = outputData.content || "";
-            
+
             if (outputData.is_stderr) {
               return {
                 ...prev,
