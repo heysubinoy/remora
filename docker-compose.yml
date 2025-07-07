@@ -27,7 +27,7 @@ services:
 
   # Job Executor API Service
   job-executor-api:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.api
     container_name: job-executor-api
@@ -50,7 +50,7 @@ services:
 
   # Job Executor Worker Service
   job-executor-worker:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.worker
     container_name: job-executor-worker

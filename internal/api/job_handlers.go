@@ -1,10 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
-	"job-executor/internal/broadcast"
 	"job-executor/internal/models"
+	"job-executor/internal/queue"
 	"log/slog"
 	"net/http"
 	"time"
@@ -256,30 +257,57 @@ func (api *API) CancelJob(c *gin.Context) {
 		return
 	}
 
-	// Try to cancel running job first
-	if job.Status == models.StatusRunning {
-		// Use queue cancellation message instead of direct worker call
+	var response *models.JobResponse
+	var statusCode int
+	var message string
+
+	// Handle cancellation based on job status
+	switch job.Status {
+	case models.StatusRunning:
+		// For running jobs, send cancellation message to worker via RabbitMQ
+		// Let the worker handle the actual cancellation and status update
 		if err := api.queue.PublishCancelMessage(jobID); err != nil {
-			// If cancellation message fails, still update status in database
-			slog.Warn("Failed to publish cancel message", "job_id", jobID, "error", err)
+			slog.Error("Failed to publish cancel message", "job_id", jobID, "error", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to send cancellation request"})
+			return
 		}
-		// Update job status regardless of message publishing success
+		
+		slog.Info("Cancellation message sent to worker", "job_id", jobID)
+		// Don't update status here - let worker handle it when it actually cancels
+		
+		response = &models.JobResponse{Job: job}
+		statusCode = http.StatusAccepted
+		message = "Cancellation request sent to worker"
+		
+	case models.StatusQueued:
+		// For queued jobs, directly update the status since they haven't started yet
 		job.Status = models.StatusCanceled
+		now := time.Now()
+		job.FinishedAt = &now
+		
 		if err := api.db.Save(&job).Error; err != nil {
+			slog.Error("Failed to cancel queued job", "job_id", jobID, "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel job"})
 			return
 		}
-	} else {
-		// For queued jobs, just update the status
-		job.Status = models.StatusCanceled
-		if err := api.db.Save(&job).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel job"})
-			return
-		}
+		
+		slog.Info("Queued job canceled", "job_id", jobID)
+		
+		response = &models.JobResponse{Job: job}
+		statusCode = http.StatusOK
+		message = "Job canceled successfully"
+		
+	default:
+		// This should not happen due to the validation above, but good to have
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Job cannot be canceled"})
+		return
 	}
 
-	response := &models.JobResponse{Job: job}
-	c.JSON(http.StatusOK, response)
+	// Return response with appropriate status and message
+	c.JSON(statusCode, gin.H{
+		"message": message,
+		"job":     response,
+	})
 }
 
 func (api *API) GetJobLogs(c *gin.Context) {
@@ -441,11 +469,28 @@ func (api *API) StreamJob(c *gin.Context) {
 		return
 	}
 
-	// Subscribe to real-time output if job is running
-	var outputChan chan broadcast.OutputEvent
+	// Create context for this SSE connection that cancels when client disconnects
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+
+	// Start consuming real-time output events from RabbitMQ
+	// This creates a unique temporary queue for this SSE client
+	var outputStarted bool
 	if job.Status == models.StatusRunning {
-		outputChan = broadcast.GlobalBroadcaster.Subscribe(jobID)
-		defer broadcast.GlobalBroadcaster.Unsubscribe(jobID, outputChan)
+		outputStarted = true
+		if err := api.queue.StartOutputConsumer(ctx, jobID, func(outputEvent queue.OutputEvent) {
+			// Send real-time output event to this SSE client
+			c.SSEvent("output", gin.H{
+				"job_id":      outputEvent.JobID,
+				"output":      outputEvent.Output,
+				"is_stderr":   outputEvent.IsStderr,
+				"line_count":  outputEvent.LineCount,
+				"timestamp":   outputEvent.Timestamp,
+			})
+			c.Writer.Flush()
+		}); err != nil {
+			slog.Error("Failed to start output consumer", "job_id", jobID, "error", err)
+		}
 	}
 
 	// Poll for updates every 500ms for running/queued jobs
@@ -458,12 +503,12 @@ func (api *API) StreamJob(c *gin.Context) {
 	for {
 		select {
 		case <-clientGone:
+			slog.Info("SSE client disconnected", "job_id", jobID)
 			return
 
-		case outputEvent := <-outputChan:
-			// Send real-time output event
-			c.SSEvent("output", outputEvent)
-			c.Writer.Flush()
+		case <-ctx.Done():
+			slog.Info("SSE context cancelled", "job_id", jobID)
+			return
 
 		case <-ticker.C:
 			// Fetch updated job status
@@ -487,10 +532,22 @@ func (api *API) StreamJob(c *gin.Context) {
 				return
 			}
 
-			// If job just started running and we don't have an output channel yet, subscribe
-			if job.Status == models.StatusRunning && outputChan == nil {
-				outputChan = broadcast.GlobalBroadcaster.Subscribe(jobID)
-				defer broadcast.GlobalBroadcaster.Unsubscribe(jobID, outputChan)
+			// If job just started running and we haven't started output consumer yet, start it
+			if job.Status == models.StatusRunning && !outputStarted {
+				outputStarted = true
+				if err := api.queue.StartOutputConsumer(ctx, jobID, func(outputEvent queue.OutputEvent) {
+					// Send real-time output event to this SSE client
+					c.SSEvent("output", gin.H{
+						"job_id":      outputEvent.JobID,
+						"output":      outputEvent.Output,
+						"is_stderr":   outputEvent.IsStderr,
+						"line_count":  outputEvent.LineCount,
+						"timestamp":   outputEvent.Timestamp,
+					})
+					c.Writer.Flush()
+				}); err != nil {
+					slog.Error("Failed to start output consumer", "job_id", jobID, "error", err)
+				}
 			}
 		}
 	}

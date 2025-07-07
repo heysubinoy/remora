@@ -21,6 +21,7 @@ A Go-based distributed job execution system that accepts job submissions via RES
 ## Architecture
 
 ### Decoupled Architecture (Recommended)
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   CLI Client    │────│   API Server    │────│   RabbitMQ      │
@@ -40,6 +41,7 @@ A Go-based distributed job execution system that accepts job submissions via RES
 ```
 
 ### Legacy Monolithic Architecture
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   CLI Client    │────│   REST API      │────│   Job Queue     │
@@ -63,6 +65,7 @@ A Go-based distributed job execution system that accepts job submissions via RES
 ### Option 1: Decoupled Architecture (Recommended)
 
 #### 1. Start RabbitMQ
+
 ```bash
 # Using Docker Compose
 docker-compose up rabbitmq
@@ -77,6 +80,7 @@ docker run -d --name rabbitmq \
 ```
 
 #### 2. Build the applications
+
 ```bash
 # Build both API server and worker
 go build -o bin/job-executor-api ./cmd/api
@@ -88,6 +92,7 @@ chmod +x build.sh
 ```
 
 #### 3. Start the services
+
 ```bash
 # Set environment variables (optional)
 export RABBITMQ_URL="amqp://admin:password123@localhost:5672/job-executor"
@@ -106,6 +111,7 @@ chmod +x start-decoupled.sh
 ```
 
 #### 4. Test the decoupled setup
+
 ```bash
 chmod +x test-decoupled.sh
 ./test-decoupled.sh
@@ -114,6 +120,7 @@ chmod +x test-decoupled.sh
 ### Option 2: Monolithic Architecture (Legacy)
 
 #### 1. Build the application
+
 ```bash
 # Build the server
 go build -o job-executor main.go

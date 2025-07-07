@@ -17,10 +17,19 @@ const (
 	ExchangeName        = "job_exchange"
 	CancelQueueName     = "cancel_queue"
 	CancelExchangeName  = "cancel_exchange"
+	OutputExchangeName  = "output_exchange"
 )
 
 type CancelMessage struct {
 	JobID string `json:"job_id"`
+}
+
+type OutputEvent struct {
+	JobID     string `json:"job_id"`
+	Output    string `json:"output"`
+	IsStderr  bool   `json:"is_stderr"`
+	LineCount int    `json:"line_count"`
+	Timestamp string `json:"timestamp"`
 }
 
 type Queue interface {
@@ -28,6 +37,8 @@ type Queue interface {
 	StartConsumer(ctx context.Context, handler func(*models.Job)) error
 	PublishCancelMessage(jobID string) error
 	StartCancelConsumer(ctx context.Context, handler func(string)) error
+	PublishOutputEvent(jobID, output string, isStderr bool, lineCount int) error
+	StartOutputConsumer(ctx context.Context, jobID string, handler func(OutputEvent)) error
 	Close() error
 }
 
@@ -136,6 +147,19 @@ func (q *RabbitMQQueue) setupExchangeAndQueue() error {
 		nil,
 	); err != nil {
 		return fmt.Errorf("failed to bind cancel queue: %w", err)
+	}
+
+	// Declare output exchange for real-time streaming
+	if err := q.channel.ExchangeDeclare(
+		OutputExchangeName, // name
+		"fanout",           // type (fanout to broadcast to all consumers)
+		false,              // durable (temporary for real-time data)
+		false,              // auto-deleted
+		false,              // internal
+		false,              // no-wait
+		nil,                // arguments
+	); err != nil {
+		return fmt.Errorf("failed to declare output exchange: %w", err)
 	}
 
 	return nil
@@ -347,6 +371,140 @@ func (q *RabbitMQQueue) StartCancelConsumer(ctx context.Context, handler func(st
 	return nil
 }
 
+func (q *RabbitMQQueue) PublishOutputEvent(jobID, output string, isStderr bool, lineCount int) error {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	if q.channel == nil {
+		return fmt.Errorf("queue is closed")
+	}
+
+	// Create output event
+	outputEvent := OutputEvent{
+		JobID:     jobID,
+		Output:    output,
+		IsStderr:  isStderr,
+		LineCount: lineCount,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+	
+	// Serialize output event to JSON
+	msgBytes, err := json.Marshal(outputEvent)
+	if err != nil {
+		return fmt.Errorf("failed to marshal output event: %w", err)
+	}
+
+	// Publish to fanout exchange (broadcasts to all consumers)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = q.channel.PublishWithContext(
+		ctx,
+		OutputExchangeName, // exchange
+		"",                 // routing key (ignored for fanout)
+		false,              // mandatory
+		false,              // immediate
+		amqp091.Publishing{
+			ContentType: "application/json",
+			Body:        msgBytes,
+			Timestamp:   time.Now(),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to publish output event: %w", err)
+	}
+
+	return nil
+}
+
+func (q *RabbitMQQueue) StartOutputConsumer(ctx context.Context, jobID string, handler func(OutputEvent)) error {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	if q.channel == nil {
+		return fmt.Errorf("queue is closed")
+	}
+
+	// Create a temporary queue for this specific consumer
+	// Each SSE client gets its own queue that auto-deletes when disconnected
+	queueName := fmt.Sprintf("output_%s_%d", jobID, time.Now().UnixNano())
+	
+	queue, err := q.channel.QueueDeclare(
+		queueName, // name (unique per consumer)
+		false,     // durable (temporary)
+		true,      // delete when unused (auto-delete when consumer disconnects)
+		true,      // exclusive (only this connection can use it)
+		false,     // no-wait
+		nil,       // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("failed to declare output queue: %w", err)
+	}
+
+	// Bind the temporary queue to the fanout exchange
+	if err := q.channel.QueueBind(
+		queue.Name,         // queue name
+		"",                 // routing key (ignored for fanout)
+		OutputExchangeName, // exchange
+		false,
+		nil,
+	); err != nil {
+		return fmt.Errorf("failed to bind output queue: %w", err)
+	}
+
+	// Start consuming output events
+	msgs, err := q.channel.Consume(
+		queue.Name, // queue
+		"",         // consumer
+		true,       // auto-ack (we don't need reliability for streaming)
+		true,       // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
+	)
+	if err != nil {
+		return fmt.Errorf("failed to register output consumer: %w", err)
+	}
+
+	slog.Info("Starting RabbitMQ output consumer", "job_id", jobID, "queue", queue.Name)
+
+	go func() {
+		defer func() {
+			// Clean up: delete the temporary queue when consumer stops
+			if _, err := q.channel.QueueDelete(queue.Name, false, false, false); err != nil {
+				slog.Error("Failed to delete temporary output queue", "queue", queue.Name, "error", err)
+			}
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				slog.Info("Output consumer shutting down", "job_id", jobID)
+				return
+			case msg, ok := <-msgs:
+				if !ok {
+					slog.Warn("Output message channel closed", "job_id", jobID)
+					return
+				}
+
+				// Parse output event
+				var outputEvent OutputEvent
+				if err := json.Unmarshal(msg.Body, &outputEvent); err != nil {
+					slog.Error("Failed to unmarshal output event", "error", err)
+					continue
+				}
+
+				// Only process events for this specific job
+				if outputEvent.JobID == jobID {
+					handler(outputEvent)
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (q *RabbitMQQueue) Close() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -421,6 +579,18 @@ func (q *InMemoryQueue) PublishCancelMessage(jobID string) error {
 
 func (q *InMemoryQueue) StartCancelConsumer(ctx context.Context, handler func(string)) error {
 	// In-memory queue doesn't support cancellation consumer
+	return nil
+}
+
+func (q *InMemoryQueue) PublishOutputEvent(jobID, output string, isStderr bool, lineCount int) error {
+	// In-memory queue doesn't support real-time output streaming
+	// This is a no-op for backward compatibility
+	return nil
+}
+
+func (q *InMemoryQueue) StartOutputConsumer(ctx context.Context, jobID string, handler func(OutputEvent)) error {
+	// In-memory queue doesn't support real-time output streaming
+	// This is a no-op for backward compatibility
 	return nil
 }
 

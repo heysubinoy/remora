@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"fmt"
-	"job-executor/internal/broadcast"
 	"job-executor/internal/config"
 	"job-executor/internal/models"
 	"job-executor/internal/queue"
@@ -66,6 +65,19 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 		"args", job.Args,
 		"server_id", job.ServerID,
 		"timeout", job.Timeout)
+
+	// Check if job was already canceled while in queue
+	// Refresh job status from database to get latest state
+	var currentJob models.Job
+	if err := w.db.First(&currentJob, "id = ?", job.ID).Error; err != nil {
+		slog.Error("Failed to fetch current job status", "job_id", job.ID, "error", err)
+		return
+	}
+
+	if currentJob.Status == models.StatusCanceled {
+		slog.Info("Job was canceled while in queue, skipping execution", "job_id", job.ID)
+		return
+	}
 
 	// Update job status to running
 	now := time.Now()
@@ -173,22 +185,23 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 			outputBuilder.WriteString(output)
 		}
 
-		// Broadcast to SSE clients if there are subscribers
-		if broadcast.GlobalBroadcaster.HasSubscribers(job.ID) {
-			broadcast.GlobalBroadcaster.Broadcast(job.ID, output, isStderr, lineCount)
-			
-			// Also update the job's output field incrementally for live monitoring
-			if isStderr {
-				job.Stderr = errorBuilder.String()
-			} else {
-				job.Stdout = outputBuilder.String()
-				job.Output = outputBuilder.String() // Keep for backward compatibility
-			}
-			
-			// Update job in database periodically (every 10 lines or every 2 seconds)
-			if lineCount%10 == 0 {
-				w.updateJob(job)
-			}
+		// Publish output event to RabbitMQ for real-time streaming
+		// This replaces the old broadcast system and supports multiple SSE clients
+		if err := w.queue.PublishOutputEvent(job.ID, output, isStderr, lineCount); err != nil {
+			slog.Warn("Failed to publish output event", "job_id", job.ID, "error", err)
+		}
+		
+		// Also update the job's output field incrementally for live monitoring
+		if isStderr {
+			job.Stderr = errorBuilder.String()
+		} else {
+			job.Stdout = outputBuilder.String()
+			job.Output = outputBuilder.String() // Keep for backward compatibility
+		}
+		
+		// Update job in database periodically (every 10 lines or every 2 seconds)
+		if lineCount%10 == 0 {
+			w.updateJob(job)
 		}
 	}
 
