@@ -1,7 +1,6 @@
 package ssh
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -253,35 +252,119 @@ func (c *Client) ExecuteStreaming(ctx context.Context, command string, timeout t
 	var wg sync.WaitGroup
 	var streamErr error
 
-	// Stream stdout
+	// Stream stdout with real-time support
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stdoutPipe)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if callback != nil {
-				callback(line+"\n", false) // false for stdout
+		
+		// Use a smaller buffer for more responsive streaming
+		buf := make([]byte, 1024)
+		var lineBuffer strings.Builder
+		
+		for {
+			n, err := stdoutPipe.Read(buf[:])
+			if n > 0 {
+				data := string(buf[:n])
+				
+				// Process character by character for real-time output
+				for _, char := range data {
+					if char == '\n' || char == '\r' {
+						if lineBuffer.Len() > 0 {
+							line := lineBuffer.String()
+							if callback != nil {
+								callback(line+"\n", false) // false for stdout
+							}
+							lineBuffer.Reset()
+						}
+					} else {
+						lineBuffer.WriteRune(char)
+					}
+				}
+				
+				// Also send partial lines for truly real-time experience (like ping dots)
+				if lineBuffer.Len() > 0 {
+					partialLine := lineBuffer.String()
+					// Send partial updates for commands that show progress (like ping)
+					if strings.Contains(partialLine, ".") || len(partialLine) > 50 {
+						if callback != nil {
+							callback(partialLine, false)
+						}
+						lineBuffer.Reset()
+					}
+				}
 			}
-		}
-		if err := scanner.Err(); err != nil && err != io.EOF {
-			streamErr = fmt.Errorf("stdout streaming error: %w", err)
+			
+			if err != nil {
+				// Send any remaining data in buffer
+				if lineBuffer.Len() > 0 {
+					if callback != nil {
+						callback(lineBuffer.String()+"\n", false)
+					}
+				}
+				
+				if err != io.EOF {
+					streamErr = fmt.Errorf("stdout streaming error: %w", err)
+				}
+				break
+			}
 		}
 	}()
 
-	// Stream stderr
+	// Stream stderr with real-time support
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if callback != nil {
-				callback(line+"\n", true) // true for stderr
+		
+		// Use a smaller buffer for more responsive streaming
+		buf := make([]byte, 1024)
+		var lineBuffer strings.Builder
+		
+		for {
+			n, err := stderrPipe.Read(buf[:])
+			if n > 0 {
+				data := string(buf[:n])
+				
+				// Process character by character for real-time output
+				for _, char := range data {
+					if char == '\n' || char == '\r' {
+						if lineBuffer.Len() > 0 {
+							line := lineBuffer.String()
+							if callback != nil {
+								callback(line+"\n", true) // true for stderr
+							}
+							lineBuffer.Reset()
+						}
+					} else {
+						lineBuffer.WriteRune(char)
+					}
+				}
+				
+				// Also send partial lines for truly real-time experience
+				if lineBuffer.Len() > 0 {
+					partialLine := lineBuffer.String()
+					// Send partial updates for commands that show progress
+					if strings.Contains(partialLine, ".") || len(partialLine) > 50 {
+						if callback != nil {
+							callback(partialLine, true)
+						}
+						lineBuffer.Reset()
+					}
+				}
 			}
-		}
-		if err := scanner.Err(); err != nil && err != io.EOF {
-			streamErr = fmt.Errorf("stderr streaming error: %w", err)
+			
+			if err != nil {
+				// Send any remaining data in buffer
+				if lineBuffer.Len() > 0 {
+					if callback != nil {
+						callback(lineBuffer.String()+"\n", true)
+					}
+				}
+				
+				if err != io.EOF {
+					streamErr = fmt.Errorf("stderr streaming error: %w", err)
+				}
+				break
+			}
 		}
 	}()
 

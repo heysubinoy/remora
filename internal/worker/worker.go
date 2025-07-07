@@ -155,6 +155,14 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 		fullCommand = fmt.Sprintf("%s %s", job.Command, job.Args)
 	}
 
+	// For commands that might buffer output (like ping), force unbuffered output
+	// This ensures real-time streaming works properly
+	if strings.Contains(strings.ToLower(fullCommand), "ping") {
+		// Use stdbuf to disable buffering, or if not available, try unbuffer
+		fullCommand = fmt.Sprintf("stdbuf -o0 -e0 %s 2>/dev/null || unbuffer %s 2>/dev/null || %s", 
+			fullCommand, fullCommand, fullCommand)
+	}
+
 	slog.Info("Executing command", 
 		"job_id", job.ID, 
 		"full_command", fullCommand)
