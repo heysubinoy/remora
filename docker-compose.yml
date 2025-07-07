@@ -1,6 +1,28 @@
-version: "3.8"
-
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: job-executor-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: jobexecutor
+      POSTGRES_USER: jobexecutor
+      POSTGRES_PASSWORD: password123
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - job-executor-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobexecutor -d jobexecutor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # RabbitMQ Message Queue
   rabbitmq:
     image: rabbitmq:3-management
     container_name: job-executor-rabbitmq
@@ -35,13 +57,18 @@ services:
       - "8080:8080"
     environment:
       - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
-      - DATABASE_URL=/app/data/jobs.db
+      - DATABASE_URL=postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable
       - SERVER_ADDR=:8080
+      - PEM_UPLOAD_DIR=/app/pem-files
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
     volumes:
       - ./data:/app/data
-      - ./web:/app/web
       - ./pem-files:/app/pem-files
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
@@ -56,18 +83,62 @@ services:
     container_name: job-executor-worker
     environment:
       - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
-      - DATABASE_URL=/app/data/jobs.db
+      - DATABASE_URL=postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable
+      - PEM_FILES_DIR=/app/pem-files
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
     volumes:
       - ./data:/app/data
       - ./pem-files:/app/pem-files
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
       - job-executor-network
     restart: unless-stopped
 
+  # Next.js Frontend
+  job-executor-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: job-executor-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=production
+    depends_on:
+      - job-executor-api
+    networks:
+      - job-executor-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Optional - for production)
+  nginx:
+    image: nginx:alpine
+    container_name: job-executor-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - job-executor-api
+      - job-executor-frontend
+    networks:
+      - job-executor-network
+    restart: unless-stopped
+    profiles:
+      - production
+
 volumes:
+  postgres_data:
+    driver: local
   rabbitmq_data:
     driver: local
 

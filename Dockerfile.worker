@@ -1,6 +1,9 @@
 # Build stage
 FROM golang:1.23-alpine AS builder
 
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev sqlite-dev
+
 WORKDIR /app
 
 # Copy go mod and sum files
@@ -16,19 +19,19 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o job-executor-work
 # Final stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates openssh-client sqlite
+RUN apk --no-cache add ca-certificates openssh-client postgresql-client
 
 WORKDIR /root/
 
 # Copy the binary from builder stage
 COPY --from=builder /app/job-executor-worker .
 
-# Create data directory
-RUN mkdir -p /app/data
+# Create data and pem-files directories
+RUN mkdir -p /app/data /app/pem-files
 
 # Environment variables for RabbitMQ and other configurations
 ENV RABBITMQ_URL=""
-ENV DATABASE_URL="/app/data/jobs.db"
+ENV DATABASE_URL="postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable"
 ENV SSH_HOST=""
 ENV SSH_PORT="22"
 ENV SSH_USER=""

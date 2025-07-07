@@ -1,0 +1,46 @@
+# Build stage
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY web/src/package.json web/src/pnpm-lock.yaml ./
+RUN npm install -g pnpm && pnpm install
+
+# Copy source code
+COPY web/src/ ./
+
+# Build the application
+RUN pnpm build
+
+# Production stage
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy package files
+COPY web/src/package.json web/src/pnpm-lock.yaml ./
+RUN pnpm install --prod
+
+# Copy built application
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+
+# Create next user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+
+# Change ownership of .next directory
+RUN chown -R nextjs:nodejs .next
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+ENV NODE_ENV production
+
+CMD ["pnpm", "start"]

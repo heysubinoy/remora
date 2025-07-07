@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+README.md
+DOCKER_DEPLOYMENT.md
+
+# Documentation
+docs/
+examples/
+
+# Data directories
+data/
+pem-files/
+ssl/
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# Node.js (for frontend builds only)
+web/src/node_modules/
+web/src/.next/
+web/src/out/
+web/src/.env.local
+web/src/.env.development.local
+web/src/.env.test.local
+web/src/.env.production.local
+
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# Local environment files
+.env
+.env.local
