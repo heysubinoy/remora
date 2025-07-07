@@ -10,6 +10,8 @@ A Go-based distributed job execution system that accepts job submissions via RES
 - **Database Storage**: SQLite/PostgreSQL for job metadata and server configurations
 - **Real-time Status Tracking**: Track job status (queued, running, completed, failed, canceled)
 - **Job Cancellation**: Cancel running or queued jobs
+- **Job Duplication**: Duplicate existing jobs with optional parameter overrides
+- **Shell Script Execution**: Submit and execute shell scripts directly
 - **Server Management**: CRUD operations for SSH server configurations
 - **CLI Client**: Command-line interface for interacting with the API
 
@@ -98,9 +100,14 @@ The server will start on `http://localhost:8080` by default.
 ### Job Management
 
 - `POST /api/v1/jobs` - Submit a new job
+- `POST /api/v1/jobs/script` - Submit a shell script job
+- `POST /api/v1/jobs/:id/duplicate` - Duplicate an existing job
 - `GET /api/v1/jobs/:id` - Get job details
 - `POST /api/v1/jobs/:id/cancel` - Cancel a job
 - `GET /api/v1/jobs/:id/logs` - Get job logs
+- `GET /api/v1/jobs/:id/stdout` - Get job stdout
+- `GET /api/v1/jobs/:id/stderr` - Get job stderr
+- `GET /api/v1/jobs/:id/stream` - Stream job output (Server-Sent Events)
 - `GET /api/v1/jobs` - List jobs (supports filtering by status and server_id)
 
 ### Server Configuration
@@ -130,7 +137,9 @@ export SSH_PASSWORD=""               # Default SSH password (optional)
 export SSH_PRIVATE_KEY=""            # Default SSH private key path (optional)
 ```
 
-## Job Request Format
+## Request Formats
+
+### Job Request
 
 ```json
 {
@@ -140,6 +149,31 @@ export SSH_PRIVATE_KEY=""            # Default SSH private key path (optional)
   "timeout": 300
 }
 ```
+
+### Script Job Request
+
+```json
+{
+  "script": "#!/bin/bash\necho 'Hello World'\ndate\nls -la",
+  "args": "arg1 arg2",
+  "server_id": "server-uuid",
+  "timeout": 300,
+  "shell": "/bin/bash"
+}
+```
+
+### Duplicate Job Request
+
+```json
+{
+  "server_id": "different-server-uuid",
+  "timeout": 600
+}
+```
+
+Note: Both `server_id` and `timeout` are optional in duplicate requests. If not provided, the original job's values will be used.
+
+````
 
 ## Server Configuration Format
 
@@ -153,7 +187,7 @@ export SSH_PRIVATE_KEY=""            # Default SSH private key path (optional)
   "password": "mypassword",
   "is_active": true
 }
-```
+````
 
 For SSH key authentication:
 
@@ -198,6 +232,72 @@ For SSH key authentication:
 # List servers
 ./client -action list-servers
 ```
+
+## Usage Examples
+
+### 1. Submitting a Shell Script Job
+
+```bash
+# Create a script job using curl
+curl -X POST http://localhost:8080/api/v1/jobs/script \
+  -H "Content-Type: application/json" \
+  -d '{
+    "script": "#!/bin/bash\necho \"Starting backup process...\"\ndate\ntar -czf /tmp/backup-$(date +%Y%m%d).tar.gz /home/user/documents\necho \"Backup completed!\"",
+    "args": "",
+    "server_id": "your-server-id",
+    "timeout": 600,
+    "shell": "/bin/bash"
+  }'
+```
+
+### 2. Duplicating a Job
+
+```bash
+# Duplicate an existing job with different timeout
+curl -X POST http://localhost:8080/api/v1/jobs/job-id-here/duplicate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timeout": 1200
+  }'
+
+# Duplicate a job to run on a different server
+curl -X POST http://localhost:8080/api/v1/jobs/job-id-here/duplicate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "server_id": "different-server-id",
+    "timeout": 900
+  }'
+```
+
+### 3. Running Script Files
+
+You can also submit the content of script files:
+
+```bash
+# Read script content and submit
+SCRIPT_CONTENT=$(cat examples/sample-script.sh)
+curl -X POST http://localhost:8080/api/v1/jobs/script \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"script\": \"$SCRIPT_CONTENT\",
+    \"args\": \"arg1 arg2\",
+    \"server_id\": \"your-server-id\",
+    \"timeout\": 300
+  }"
+```
+
+### 4. Monitoring Job Output in Real-time
+
+```bash
+# Use Server-Sent Events to monitor job output
+curl -N http://localhost:8080/api/v1/jobs/job-id-here/stream
+```
+
+This will provide real-time updates including:
+
+- Job status changes
+- Live output from stdout/stderr
+- Completion notifications
 
 ## Security Considerations
 

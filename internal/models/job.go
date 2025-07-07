@@ -53,6 +53,21 @@ type JobRequest struct {
 	Timeout  int    `json:"timeout,omitempty"`
 }
 
+// ScriptJobRequest handles shell script execution
+type ScriptJobRequest struct {
+	Script   string `json:"script" binding:"required"`          // The shell script content
+	Args     string `json:"args"`                               // Arguments to pass to the script
+	ServerID string `json:"server_id" binding:"required"`       // Target server
+	Timeout  int    `json:"timeout,omitempty"`                  // Execution timeout
+	Shell    string `json:"shell,omitempty"`                    // Shell to use (default: /bin/bash)
+}
+
+// DuplicateJobRequest handles job duplication
+type DuplicateJobRequest struct {
+	ServerID *string `json:"server_id,omitempty"`               // Optional: change server
+	Timeout  *int    `json:"timeout,omitempty"`                 // Optional: change timeout
+}
+
 type JobResponse struct {
 	Job
 	Duration *time.Duration `json:"duration,omitempty"`

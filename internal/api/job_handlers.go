@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/base64"
+	"fmt"
 	"job-executor/internal/broadcast"
 	"job-executor/internal/models"
 	"log/slog"
@@ -62,6 +64,158 @@ func (api *API) SubmitJob(c *gin.Context) {
 
 	response := &models.JobResponse{Job: *job}
 	c.JSON(http.StatusCreated, response)
+}
+
+// SubmitScriptJob handles shell script execution
+func (api *API) SubmitScriptJob(c *gin.Context) {
+	var req models.ScriptJobRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate that the server exists and is active
+	var server models.Server
+	if err := api.db.First(&server, "id = ? AND is_active = ?", req.ServerID, true).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Server not found or inactive"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate server"})
+		return
+	}
+
+	// Set default timeout if not provided
+	if req.Timeout <= 0 {
+		req.Timeout = 300 // 5 minutes default
+	}
+
+	// Set default shell if not provided
+	shell := req.Shell
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+
+	// Create a temporary script file name
+	scriptFileName := fmt.Sprintf("/tmp/script_%s.sh", time.Now().Format("20060102_150405"))
+
+	// Encode the script content to base64 to safely pass it through the command
+	scriptB64 := base64.StdEncoding.EncodeToString([]byte(req.Script))
+
+	// Create command to write script to file and execute it
+	// We use base64 to avoid issues with special characters and quotes
+	command := shell
+	args := fmt.Sprintf(`-c "echo '%s' | base64 -d > %s && chmod +x %s && %s %s; rm -f %s"`,
+		scriptB64, scriptFileName, scriptFileName, scriptFileName, req.Args, scriptFileName)
+
+	// Create job
+	job := &models.Job{
+		Command:  command,
+		Args:     args,
+		ServerID: req.ServerID,
+		Timeout:  req.Timeout,
+		Status:   models.StatusQueued,
+	}
+
+	// Save to database
+	if err := api.db.Create(job).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create script job"})
+		return
+	}
+
+	// Add to queue
+	if err := api.queue.Push(job); err != nil {
+		// Update job status to failed if can't queue
+		job.Status = models.StatusFailed
+		job.Error = "Failed to queue script job: " + err.Error()
+		api.db.Save(job)
+
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Job queue is full"})
+		return
+	}
+
+	response := &models.JobResponse{Job: *job}
+	c.JSON(http.StatusCreated, response)
+}
+
+// DuplicateJob creates a new job based on an existing job
+func (api *API) DuplicateJob(c *gin.Context) {
+	jobID := c.Param("id")
+
+	// Get the original job
+	var originalJob models.Job
+	if err := api.db.Preload("Server").First(&originalJob, "id = ?", jobID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch job"})
+		return
+	}
+
+	// Parse optional modifications
+	var req models.DuplicateJobRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Determine server ID (use override if provided, otherwise use original)
+	serverID := originalJob.ServerID
+	if req.ServerID != nil {
+		serverID = *req.ServerID
+	}
+
+	// Validate that the target server exists and is active
+	var server models.Server
+	if err := api.db.First(&server, "id = ? AND is_active = ?", serverID, true).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Target server not found or inactive"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate target server"})
+		return
+	}
+
+	// Determine timeout (use override if provided, otherwise use original)
+	timeout := originalJob.Timeout
+	if req.Timeout != nil {
+		timeout = *req.Timeout
+	}
+
+	// Create duplicated job
+	duplicatedJob := &models.Job{
+		Command:  originalJob.Command,
+		Args:     originalJob.Args,
+		ServerID: serverID,
+		Timeout:  timeout,
+		Status:   models.StatusQueued,
+		LogLevel: originalJob.LogLevel,
+	}
+
+	// Save to database
+	if err := api.db.Create(duplicatedJob).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create duplicated job"})
+		return
+	}
+
+	// Add to queue
+	if err := api.queue.Push(duplicatedJob); err != nil {
+		// Update job status to failed if can't queue
+		duplicatedJob.Status = models.StatusFailed
+		duplicatedJob.Error = "Failed to queue duplicated job: " + err.Error()
+		api.db.Save(duplicatedJob)
+
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Job queue is full"})
+		return
+	}
+
+	response := &models.JobResponse{Job: *duplicatedJob}
+	c.JSON(http.StatusCreated, gin.H{
+		"message":      "Job duplicated successfully",
+		"original_job": originalJob.ID,
+		"new_job":      response,
+	})
 }
 
 func (api *API) GetJob(c *gin.Context) {
@@ -302,12 +456,12 @@ func (api *API) StreamJob(c *gin.Context) {
 		select {
 		case <-clientGone:
 			return
-		
+
 		case outputEvent := <-outputChan:
 			// Send real-time output event
 			c.SSEvent("output", outputEvent)
 			c.Writer.Flush()
-			
+
 		case <-ticker.C:
 			// Fetch updated job status
 			if err := api.db.Preload("Server").First(&job, "id = ?", jobID).Error; err != nil {

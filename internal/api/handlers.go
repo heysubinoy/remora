@@ -22,6 +22,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *wo
 	{
 		// Job routes
 		v1.POST("/jobs", api.SubmitJob)
+		v1.POST("/jobs/script", api.SubmitScriptJob)
+		v1.POST("/jobs/:id/duplicate", api.DuplicateJob)
 		v1.GET("/jobs/:id", api.GetJob)
 		v1.POST("/jobs/:id/cancel", api.CancelJob)
 		v1.GET("/jobs/:id/logs", api.GetJobLogs)
