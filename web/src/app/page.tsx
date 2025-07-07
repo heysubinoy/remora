@@ -233,17 +233,17 @@ export default function JobExecutionDashboard() {
       }
     } catch (error: any) {
       console.error("Delete server error:", error);
-      
+
       // Handle specific error cases
       if (error?.response?.status === 409) {
         const errorData = error.response.data;
-        
+
         if (errorData.details?.includes("force=true")) {
           // Server has job history, offer force deletion
           const confirmForce = window.confirm(
             `${errorData.error}\n\n${errorData.details}\n\nDo you want to force delete this server and all its job history?`
           );
-          
+
           if (confirmForce) {
             // Retry with force=true
             await handleDeleteServer(serverId, true);

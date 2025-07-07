@@ -88,20 +88,23 @@ export function useServers() {
     []
   );
 
-  const deleteServer = useCallback(async (id: string, force?: boolean): Promise<boolean> => {
-    try {
-      setError(null);
-      await serverAPI.delete(id, force);
-      setServers((prev) => prev.filter((s) => s.id !== id));
-      return true;
-    } catch (err) {
-      const message =
-        err instanceof APIError ? err.message : "Failed to delete server";
-      setError(message);
-      console.error("Error deleting server:", err);
-      return false;
-    }
-  }, []);
+  const deleteServer = useCallback(
+    async (id: string, force?: boolean): Promise<boolean> => {
+      try {
+        setError(null);
+        await serverAPI.delete(id, force);
+        setServers((prev) => prev.filter((s) => s.id !== id));
+        return true;
+      } catch (err) {
+        const message =
+          err instanceof APIError ? err.message : "Failed to delete server";
+        setError(message);
+        console.error("Error deleting server:", err);
+        return false;
+      }
+    },
+    []
+  );
 
   const testConnection = useCallback(
     async (id: string): Promise<{ success: boolean; message?: string }> => {

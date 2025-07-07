@@ -213,7 +213,7 @@ export const serverAPI = {
 
   // Delete server
   delete: (id: string, force?: boolean): Promise<void> =>
-    apiRequest(`/api/v1/servers/${id}${force ? '?force=true' : ''}`, {
+    apiRequest(`/api/v1/servers/${id}${force ? "?force=true" : ""}`, {
       method: "DELETE",
     }),
 
