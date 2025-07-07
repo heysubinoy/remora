@@ -46,15 +46,36 @@ func main() {
 	// Initialize job queue (RabbitMQ) - for publishing jobs only
 	var jobQueue queue.Queue
 	
-	// Try to connect to RabbitMQ, fallback to in-memory queue if unavailable
-	rabbitQueue, err := queue.NewRabbitMQQueue(cfg.RabbitMQURL)
-	if err != nil {
-		slog.Warn("Failed to connect to RabbitMQ, using in-memory queue", "error", err, "url", cfg.RabbitMQURL)
+	// Try to connect to RabbitMQ with retries, fallback to in-memory queue if unavailable
+	maxRetries := 5
+	retryDelay := 3 * time.Second
+	
+	slog.Info("Attempting to connect to RabbitMQ", "url", cfg.RabbitMQURL, "max_retries", maxRetries)
+	
+	var rabbitQueue *queue.RabbitMQQueue
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		slog.Info("RabbitMQ connection attempt", "attempt", attempt, "max_retries", maxRetries)
+		
+		var connErr error
+		rabbitQueue, connErr = queue.NewRabbitMQQueue(cfg.RabbitMQURL)
+		if connErr == nil {
+			slog.Info("Connected to RabbitMQ successfully", "url", cfg.RabbitMQURL, "attempt", attempt)
+			jobQueue = rabbitQueue
+			break
+		}
+		
+		slog.Warn("Failed to connect to RabbitMQ", "error", connErr, "attempt", attempt, "max_retries", maxRetries)
+		
+		if attempt < maxRetries {
+			slog.Info("Retrying RabbitMQ connection", "retry_delay", retryDelay, "next_attempt", attempt+1)
+			time.Sleep(retryDelay)
+		}
+	}
+	
+	if jobQueue == nil {
+		slog.Warn("Failed to connect to RabbitMQ after all retries, using in-memory queue", "url", cfg.RabbitMQURL)
 		jobQueue = queue.NewInMemoryQueue()
 	} else {
-		slog.Info("Connected to RabbitMQ successfully", "url", cfg.RabbitMQURL)
-		jobQueue = rabbitQueue
-		
 		// Ensure graceful cleanup of RabbitMQ connection
 		defer func() {
 			if closeErr := rabbitQueue.Close(); closeErr != nil {

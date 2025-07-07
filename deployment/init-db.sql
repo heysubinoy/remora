@@ -4,7 +4,25 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create jobs table (if it doesn't exist)
+-- Create servers table first (referenced by jobs)
+CREATE TABLE IF NOT EXISTS servers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    hostname VARCHAR(255) NOT NULL,
+    port INTEGER NOT NULL DEFAULT 22,
+    "user" VARCHAR(255) NOT NULL,
+    auth_type VARCHAR(50) NOT NULL DEFAULT 'password',
+    password VARCHAR(255),
+    private_key TEXT,
+    pem_file TEXT,
+    pem_file_url VARCHAR(500),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(name)
+);
+
+-- Create jobs table with foreign key constraint
 CREATE TABLE IF NOT EXISTS jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     command TEXT NOT NULL,
@@ -15,25 +33,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create servers table (if it doesn't exist)
-CREATE TABLE IF NOT EXISTS servers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    hostname VARCHAR(255) NOT NULL,
-    port INTEGER NOT NULL DEFAULT 22,
-    user VARCHAR(255) NOT NULL,
-    auth_type VARCHAR(50) NOT NULL DEFAULT 'password',
-    password VARCHAR(255),
-    private_key TEXT,
-    pem_file TEXT,
-    pem_file_url VARCHAR(500),
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(name)
+    CONSTRAINT fk_jobs_server FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE RESTRICT
 );
 
 -- Create indexes for better performance

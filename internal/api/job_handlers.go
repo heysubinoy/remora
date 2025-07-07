@@ -53,7 +53,9 @@ func (api *API) SubmitJob(c *gin.Context) {
 	}
 
 	// Add to queue
+	slog.Info("About to push job to queue", "job_id", job.ID, "command", job.Command)
 	if err := api.queue.Push(job); err != nil {
+		slog.Error("Failed to push job to queue", "job_id", job.ID, "error", err)
 		// Update job status to failed if can't queue
 		job.Status = models.StatusFailed
 		job.Error = "Failed to queue job: " + err.Error()
@@ -62,6 +64,7 @@ func (api *API) SubmitJob(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Job queue is full"})
 		return
 	}
+	slog.Info("Successfully pushed job to queue", "job_id", job.ID)
 
 	response := &models.JobResponse{Job: *job}
 	c.JSON(http.StatusCreated, response)
@@ -125,7 +128,9 @@ func (api *API) SubmitScriptJob(c *gin.Context) {
 	}
 
 	// Add to queue
+	slog.Info("About to push script job to queue", "job_id", job.ID, "command", job.Command)
 	if err := api.queue.Push(job); err != nil {
+		slog.Error("Failed to push script job to queue", "job_id", job.ID, "error", err)
 		// Update job status to failed if can't queue
 		job.Status = models.StatusFailed
 		job.Error = "Failed to queue script job: " + err.Error()
@@ -134,6 +139,7 @@ func (api *API) SubmitScriptJob(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Job queue is full"})
 		return
 	}
+	slog.Info("Successfully pushed script job to queue", "job_id", job.ID)
 
 	response := &models.JobResponse{Job: *job}
 	c.JSON(http.StatusCreated, response)
@@ -201,7 +207,9 @@ func (api *API) DuplicateJob(c *gin.Context) {
 	}
 
 	// Add to queue
+	slog.Info("About to push duplicated job to queue", "job_id", duplicatedJob.ID, "command", duplicatedJob.Command)
 	if err := api.queue.Push(duplicatedJob); err != nil {
+		slog.Error("Failed to push duplicated job to queue", "job_id", duplicatedJob.ID, "error", err)
 		// Update job status to failed if can't queue
 		duplicatedJob.Status = models.StatusFailed
 		duplicatedJob.Error = "Failed to queue duplicated job: " + err.Error()
@@ -210,6 +218,7 @@ func (api *API) DuplicateJob(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Job queue is full"})
 		return
 	}
+	slog.Info("Successfully pushed duplicated job to queue", "job_id", duplicatedJob.ID)
 
 	response := &models.JobResponse{Job: *duplicatedJob}
 	c.JSON(http.StatusCreated, gin.H{

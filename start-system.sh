@@ -1,4 +1,4 @@
-#!/bin/bash
+ #!/bin/bash
 # Job Executor - Unified Docker Compose Startup Script
 
 set -e

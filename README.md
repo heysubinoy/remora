@@ -62,7 +62,53 @@ A Go-based distributed job execution system that accepts job submissions via RES
 
 ## Quick Start
 
-### Option 1: Decoupled Architecture (Recommended)
+### Option 1: Docker Deployment (Recommended)
+
+The easiest way to get started is using Docker Compose, which will start the complete system with PostgreSQL, RabbitMQ, API server, worker, and web frontend.
+
+#### Prerequisites
+
+- Docker 20.10+
+- Docker Compose 2.0+
+
+#### Start the Complete System
+
+**Windows:**
+
+```powershell
+# Copy environment template
+copy deployment\.env.template .env
+
+# Start the system
+.\deployment\start-system.ps1 start
+```
+
+**Linux/macOS:**
+
+```bash
+# Copy environment template
+cp deployment/.env.template .env
+
+# Start the system
+chmod +x deployment/start-system.sh
+./deployment/start-system.sh start
+```
+
+**Direct Docker Compose:**
+
+```bash
+docker compose up -d
+```
+
+#### Access the Services
+
+- **Web Interface**: http://localhost:3000
+- **API Server**: http://localhost:8080
+- **RabbitMQ Management**: http://localhost:15672 (admin/password123)
+
+For detailed Docker deployment instructions, see [`deployment/DOCKER_DEPLOYMENT.md`](deployment/DOCKER_DEPLOYMENT.md).
+
+### Option 2: Development Setup (Decoupled Architecture)
 
 #### 1. Start RabbitMQ
 
@@ -117,7 +163,7 @@ chmod +x test-decoupled.sh
 ./test-decoupled.sh
 ```
 
-### Option 2: Monolithic Architecture (Legacy)
+### Option 3: Monolithic Architecture (Legacy)
 
 #### 1. Build the application
 

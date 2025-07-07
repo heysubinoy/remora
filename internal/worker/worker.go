@@ -37,18 +37,24 @@ func (w *Worker) Start(ctx context.Context) {
 	slog.Info("Starting job worker")
 
 	// Start consuming jobs from RabbitMQ queue
+	slog.Info("Attempting to start queue consumer")
 	if err := w.queue.StartConsumer(ctx, w.processJobWrapper); err != nil {
 		slog.Error("Failed to start queue consumer", "error", err)
 		return
 	}
+	slog.Info("Queue consumer started successfully")
 
 	// Start consuming cancellation messages
+	slog.Info("Attempting to start cancel consumer")
 	if err := w.queue.StartCancelConsumer(ctx, w.handleCancelMessage); err != nil {
 		slog.Error("Failed to start cancel consumer", "error", err)
 		// Continue without cancellation support
+	} else {
+		slog.Info("Cancel consumer started successfully")
 	}
 
 	// Keep worker alive until context is cancelled
+	slog.Info("Worker fully started, waiting for jobs...")
 	<-ctx.Done()
 	slog.Info("Worker shutting down")
 }

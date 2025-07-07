@@ -166,16 +166,20 @@ func (q *RabbitMQQueue) setupExchangeAndQueue() error {
 }
 
 func (q *RabbitMQQueue) Push(job *models.Job) error {
+	slog.Info("Attempting to push job to RabbitMQ queue", "job_id", job.ID, "command", job.Command)
+	
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
 	if q.channel == nil {
+		slog.Error("Cannot push job: queue channel is nil", "job_id", job.ID)
 		return fmt.Errorf("queue is closed")
 	}
 
 	// Serialize job to JSON
 	jobBytes, err := json.Marshal(job)
 	if err != nil {
+		slog.Error("Failed to marshal job", "job_id", job.ID, "error", err)
 		return fmt.Errorf("failed to marshal job: %w", err)
 	}
 
@@ -183,6 +187,8 @@ func (q *RabbitMQQueue) Push(job *models.Job) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	slog.Info("Publishing job to RabbitMQ", "job_id", job.ID, "exchange", ExchangeName, "queue", QueueName)
+	
 	err = q.channel.PublishWithContext(
 		ctx,
 		ExchangeName, // exchange
@@ -197,6 +203,7 @@ func (q *RabbitMQQueue) Push(job *models.Job) error {
 		},
 	)
 	if err != nil {
+		slog.Error("Failed to publish job to RabbitMQ", "job_id", job.ID, "error", err)
 		return fmt.Errorf("failed to publish job: %w", err)
 	}
 

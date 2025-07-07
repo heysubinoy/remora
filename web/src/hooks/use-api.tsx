@@ -88,10 +88,10 @@ export function useServers() {
     []
   );
 
-  const deleteServer = useCallback(async (id: string): Promise<boolean> => {
+  const deleteServer = useCallback(async (id: string, force?: boolean): Promise<boolean> => {
     try {
       setError(null);
-      await serverAPI.delete(id);
+      await serverAPI.delete(id, force);
       setServers((prev) => prev.filter((s) => s.id !== id));
       return true;
     } catch (err) {

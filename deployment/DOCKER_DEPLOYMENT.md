@@ -17,7 +17,7 @@ The unified Docker Compose setup includes:
 
 ### Prerequisites
 
-- Docker 20.10+ 
+- Docker 20.10+
 - Docker Compose 2.0+
 - At least 2GB RAM available
 - Ports 3000, 5432, 5672, 8080, 15672 available
@@ -42,12 +42,12 @@ docker compose up -d
 
 After startup, the following services will be available:
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **Web Interface** | http://localhost:3000 | N/A |
-| **API Server** | http://localhost:8080 | N/A |
-| **RabbitMQ Management** | http://localhost:15672 | admin / password123 |
-| **PostgreSQL** | localhost:5432 | jobexecutor / password123 |
+| Service                 | URL                    | Credentials               |
+| ----------------------- | ---------------------- | ------------------------- |
+| **Web Interface**       | http://localhost:3000  | N/A                       |
+| **API Server**          | http://localhost:8080  | N/A                       |
+| **RabbitMQ Management** | http://localhost:15672 | admin / password123       |
+| **PostgreSQL**          | localhost:5432         | jobexecutor / password123 |
 
 ## Service Architecture
 
@@ -114,6 +114,7 @@ docker compose up -d nginx
 ### SSL Configuration
 
 1. Place SSL certificates in the `ssl/` directory:
+
    ```
    ssl/
    ├── cert.pem
@@ -132,6 +133,7 @@ docker compose up -d nginx
 For production use:
 
 1. **Change default passwords** in `.env`:
+
    ```bash
    POSTGRES_PASSWORD=your-secure-db-password
    RABBITMQ_DEFAULT_PASS=your-secure-rabbitmq-password
@@ -139,6 +141,7 @@ For production use:
    ```
 
 2. **Configure AWS credentials** in `.env`:
+
    ```bash
    AWS_ACCESS_KEY_ID=your-aws-access-key
    AWS_SECRET_ACCESS_KEY=your-aws-secret-key
@@ -146,12 +149,13 @@ For production use:
    ```
 
 3. **Configure firewall** to restrict access:
+
    - Only expose port 80/443 (Nginx) externally
    - Keep other ports (5432, 5672, 8080) internal
 
-3. **Enable database SSL** in production
+4. **Enable database SSL** in production
 
-4. **Set up monitoring** and log aggregation
+5. **Set up monitoring** and log aggregation
 
 ## Management Commands
 
@@ -258,6 +262,7 @@ psql -h localhost -p 5432 -U jobexecutor -d jobexecutor
 ### RabbitMQ Management
 
 Access RabbitMQ Management UI:
+
 - URL: http://localhost:15672
 - Username: admin
 - Password: password123
@@ -300,10 +305,10 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: '0.5'
+          cpus: "0.5"
         reservations:
           memory: 256M
-          cpus: '0.25'
+          cpus: "0.25"
 ```
 
 ### Database Optimization

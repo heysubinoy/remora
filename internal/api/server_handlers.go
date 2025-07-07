@@ -192,33 +192,91 @@ func (api *API) UpdateServer(c *gin.Context) {
 func (api *API) DeleteServer(c *gin.Context) {
 	serverID := c.Param("id")
 
+	// Check if server exists
 	var server models.Server
 	if err := api.db.First(&server, "id = ?", serverID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch server"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 
-	// Check if server is being used by any active jobs
+	// Check if there are any active jobs for this server
 	var activeJobCount int64
-	api.db.Model(&models.Job{}).Where("status IN ? AND server_id = ?", 
-		[]string{string(models.StatusQueued), string(models.StatusRunning)}, serverID).Count(&activeJobCount)
-	
-	if activeJobCount > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "Cannot delete server with active jobs"})
+	if err := api.db.Model(&models.Job{}).Where("server_id = ? AND status IN ?", serverID, []string{"queued", "running"}).Count(&activeJobCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check active jobs"})
 		return
+	}
+
+	if activeJobCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Cannot delete server with active jobs",
+			"details": "This server has jobs that are currently queued or running. Please wait for them to complete or cancel them before deleting the server.",
+			"active_jobs": activeJobCount,
+		})
+		return
+	}
+
+	// Check for force deletion parameter
+	force := c.Query("force") == "true"
+	
+	// Check if there are any completed jobs for this server
+	var totalJobCount int64
+	if err := api.db.Model(&models.Job{}).Where("server_id = ?", serverID).Count(&totalJobCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check job history"})
+		return
+	}
+
+	if totalJobCount > 0 && !force {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Server has associated job history",
+			"details": "This server has job history records. Add '?force=true' to delete the server and all associated job records.",
+			"total_jobs": totalJobCount,
+		})
+		return
+	}
+
+	// Begin transaction for deletion
+	tx := api.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// If force is true, delete all associated jobs first
+	if force && totalJobCount > 0 {
+		if err := tx.Where("server_id = ?", serverID).Delete(&models.Job{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete associated jobs"})
+			return
+		}
 	}
 
 	// Delete the server
-	if err := api.db.Delete(&server).Error; err != nil {
+	if err := tx.Delete(&server).Error; err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete server"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Server deleted successfully"})
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit deletion"})
+		return
+	}
+
+	responseMessage := "Server deleted successfully"
+	if force && totalJobCount > 0 {
+		responseMessage = fmt.Sprintf("Server and %d associated job records deleted successfully", totalJobCount)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": responseMessage,
+		"deleted_jobs": totalJobCount,
+	})
 }
 
 func (api *API) ListServers(c *gin.Context) {

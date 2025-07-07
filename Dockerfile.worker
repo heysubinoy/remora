@@ -37,5 +37,6 @@ ENV SSH_PORT="22"
 ENV SSH_USER=""
 ENV SSH_PASSWORD=""
 ENV SSH_PRIVATE_KEY=""
+ENV LOG_LEVEL="debug"
 
 CMD ["./job-executor-worker"]

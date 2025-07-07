@@ -2,7 +2,12 @@
 .git
 .gitignore
 README.md
-DOCKER_DEPLOYMENT.md
+
+# Deployment files (except what Docker needs)
+deployment/
+!deployment/init-db.sql
+!deployment/nginx.conf
+!deployment/rabbitmq.conf
 
 # Documentation
 docs/
