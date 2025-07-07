@@ -25,24 +25,47 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # Optional: Job Executor service (uncomment to run with Docker)
-  # job-executor:
-  #   build: .
-  #   container_name: job-executor-app
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
-  #     - DATABASE_URL=/app/data/jobs.db
-  #     - SERVER_ADDR=:8080
-  #   volumes:
-  #     - ./data:/app/data
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   networks:
-  #     - job-executor-network
-  #   restart: unless-stopped
+  # Job Executor API Service
+  job-executor-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: job-executor-api
+    ports:
+      - "8080:8080"
+    environment:
+      - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
+      - DATABASE_URL=/app/data/jobs.db
+      - SERVER_ADDR=:8080
+    volumes:
+      - ./data:/app/data
+      - ./web:/app/web
+      - ./pem-files:/app/pem-files
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - job-executor-network
+    restart: unless-stopped
+
+  # Job Executor Worker Service
+  job-executor-worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: job-executor-worker
+    environment:
+      - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
+      - DATABASE_URL=/app/data/jobs.db
+    volumes:
+      - ./data:/app/data
+      - ./pem-files:/app/pem-files
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - job-executor-network
+    restart: unless-stopped
 
 volumes:
   rabbitmq_data:

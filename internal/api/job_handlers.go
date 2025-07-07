@@ -258,13 +258,16 @@ func (api *API) CancelJob(c *gin.Context) {
 
 	// Try to cancel running job first
 	if job.Status == models.StatusRunning {
-		if err := api.worker.CancelJob(jobID); err != nil {
-			// If cancellation fails, still update status in database
-			job.Status = models.StatusCanceled
-			if err := api.db.Save(&job).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel job"})
-				return
-			}
+		// Use queue cancellation message instead of direct worker call
+		if err := api.queue.PublishCancelMessage(jobID); err != nil {
+			// If cancellation message fails, still update status in database
+			slog.Warn("Failed to publish cancel message", "job_id", jobID, "error", err)
+		}
+		// Update job status regardless of message publishing success
+		job.Status = models.StatusCanceled
+		if err := api.db.Save(&job).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel job"})
+			return
 		}
 	} else {
 		// For queued jobs, just update the status

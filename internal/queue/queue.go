@@ -13,13 +13,21 @@ import (
 )
 
 const (
-	QueueName    = "job_queue"
-	ExchangeName = "job_exchange"
+	QueueName           = "job_queue"
+	ExchangeName        = "job_exchange"
+	CancelQueueName     = "cancel_queue"
+	CancelExchangeName  = "cancel_exchange"
 )
+
+type CancelMessage struct {
+	JobID string `json:"job_id"`
+}
 
 type Queue interface {
 	Push(job *models.Job) error
 	StartConsumer(ctx context.Context, handler func(*models.Job)) error
+	PublishCancelMessage(jobID string) error
+	StartCancelConsumer(ctx context.Context, handler func(string)) error
 	Close() error
 }
 
@@ -56,7 +64,7 @@ func NewRabbitMQQueue(rabbitmqURL string) (*RabbitMQQueue, error) {
 }
 
 func (q *RabbitMQQueue) setupExchangeAndQueue() error {
-	// Declare exchange
+	// Declare job exchange
 	if err := q.channel.ExchangeDeclare(
 		ExchangeName, // name
 		"direct",     // type
@@ -66,10 +74,10 @@ func (q *RabbitMQQueue) setupExchangeAndQueue() error {
 		false,        // no-wait
 		nil,          // arguments
 	); err != nil {
-		return fmt.Errorf("failed to declare exchange: %w", err)
+		return fmt.Errorf("failed to declare job exchange: %w", err)
 	}
 
-	// Declare queue
+	// Declare job queue
 	_, err := q.channel.QueueDeclare(
 		QueueName, // name
 		true,      // durable
@@ -79,10 +87,10 @@ func (q *RabbitMQQueue) setupExchangeAndQueue() error {
 		nil,       // arguments
 	)
 	if err != nil {
-		return fmt.Errorf("failed to declare queue: %w", err)
+		return fmt.Errorf("failed to declare job queue: %w", err)
 	}
 
-	// Bind queue to exchange
+	// Bind job queue to exchange
 	if err := q.channel.QueueBind(
 		QueueName,    // queue name
 		QueueName,    // routing key
@@ -90,7 +98,44 @@ func (q *RabbitMQQueue) setupExchangeAndQueue() error {
 		false,
 		nil,
 	); err != nil {
-		return fmt.Errorf("failed to bind queue: %w", err)
+		return fmt.Errorf("failed to bind job queue: %w", err)
+	}
+
+	// Declare cancel exchange
+	if err := q.channel.ExchangeDeclare(
+		CancelExchangeName, // name
+		"direct",           // type
+		true,               // durable
+		false,              // auto-deleted
+		false,              // internal
+		false,              // no-wait
+		nil,                // arguments
+	); err != nil {
+		return fmt.Errorf("failed to declare cancel exchange: %w", err)
+	}
+
+	// Declare cancel queue
+	_, err = q.channel.QueueDeclare(
+		CancelQueueName, // name
+		true,            // durable
+		false,           // delete when unused
+		false,           // exclusive
+		false,           // no-wait
+		nil,             // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("failed to declare cancel queue: %w", err)
+	}
+
+	// Bind cancel queue to exchange
+	if err := q.channel.QueueBind(
+		CancelQueueName,    // queue name
+		CancelQueueName,    // routing key
+		CancelExchangeName, // exchange
+		false,
+		nil,
+	); err != nil {
+		return fmt.Errorf("failed to bind cancel queue: %w", err)
 	}
 
 	return nil
@@ -200,6 +245,108 @@ func (q *RabbitMQQueue) StartConsumer(ctx context.Context, handler func(*models.
 	return nil
 }
 
+func (q *RabbitMQQueue) PublishCancelMessage(jobID string) error {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	if q.channel == nil {
+		return fmt.Errorf("queue is closed")
+	}
+
+	// Create cancel message
+	cancelMsg := CancelMessage{JobID: jobID}
+	
+	// Serialize cancel message to JSON
+	msgBytes, err := json.Marshal(cancelMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cancel message: %w", err)
+	}
+
+	// Publish to RabbitMQ
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err = q.channel.PublishWithContext(
+		ctx,
+		CancelExchangeName, // exchange
+		CancelQueueName,    // routing key
+		false,              // mandatory
+		false,              // immediate
+		amqp091.Publishing{
+			DeliveryMode: amqp091.Persistent, // make message persistent
+			ContentType:  "application/json",
+			Body:         msgBytes,
+			Timestamp:    time.Now(),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to publish cancel message: %w", err)
+	}
+
+	slog.Info("Cancel message published to RabbitMQ", "job_id", jobID)
+	return nil
+}
+
+func (q *RabbitMQQueue) StartCancelConsumer(ctx context.Context, handler func(string)) error {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	if q.channel == nil {
+		return fmt.Errorf("queue is closed")
+	}
+
+	// Start consuming cancel messages
+	msgs, err := q.channel.Consume(
+		CancelQueueName, // queue
+		"",              // consumer
+		false,           // auto-ack (we'll ack manually)
+		false,           // exclusive
+		false,           // no-local
+		false,           // no-wait
+		nil,             // args
+	)
+	if err != nil {
+		return fmt.Errorf("failed to register cancel consumer: %w", err)
+	}
+
+	slog.Info("Starting RabbitMQ cancel consumer", "queue", CancelQueueName)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				slog.Info("Cancel consumer shutting down")
+				return
+			case msg, ok := <-msgs:
+				if !ok {
+					slog.Warn("Cancel message channel closed")
+					return
+				}
+
+				// Parse cancel message
+				var cancelMsg CancelMessage
+				if err := json.Unmarshal(msg.Body, &cancelMsg); err != nil {
+					slog.Error("Failed to unmarshal cancel message", "error", err)
+					msg.Nack(false, false) // reject and don't requeue
+					continue
+				}
+
+				slog.Info("Received cancel message from RabbitMQ", "job_id", cancelMsg.JobID)
+
+				// Process cancel message
+				handler(cancelMsg.JobID)
+
+				// Acknowledge message
+				if err := msg.Ack(false); err != nil {
+					slog.Error("Failed to ack cancel message", "job_id", cancelMsg.JobID, "error", err)
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (q *RabbitMQQueue) Close() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -264,6 +411,16 @@ func (q *InMemoryQueue) Close() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	close(q.jobs)
+	return nil
+}
+
+func (q *InMemoryQueue) PublishCancelMessage(jobID string) error {
+	// In-memory queue doesn't support cancellation
+	return fmt.Errorf("cancellation not supported in in-memory queue")
+}
+
+func (q *InMemoryQueue) StartCancelConsumer(ctx context.Context, handler func(string)) error {
+	// In-memory queue doesn't support cancellation consumer
 	return nil
 }
 

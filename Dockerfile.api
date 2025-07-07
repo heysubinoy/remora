@@ -1,0 +1,34 @@
+# Build stage
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the API binary
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o job-executor-api ./cmd/api
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates openssh-client sqlite
+
+WORKDIR /root/
+
+# Copy the binary from builder stage
+COPY --from=builder /app/job-executor-api .
+
+# Copy web assets
+COPY web/ ./web/
+
+# Create data directory
+RUN mkdir -p /app/data
+
+EXPOSE 8080
+
+CMD ["./job-executor-api"]

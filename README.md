@@ -7,10 +7,11 @@ A Go-based distributed job execution system that accepts job submissions via RES
 - **REST API Server**: Built with Gin framework
 - **Remote SSH Execution**: Execute commands on remote servers via SSH
 - **RabbitMQ Integration**: Reliable message queuing with automatic fallback to in-memory queue
+- **Decoupled Architecture**: API server and worker run as independent processes
 - **Job Queue & Worker**: Background processing with persistent job queue
 - **Database Storage**: SQLite/PostgreSQL for job metadata and server configurations
 - **Real-time Status Tracking**: Track job status (queued, running, completed, failed, canceled)
-- **Job Cancellation**: Cancel running or queued jobs
+- **Job Cancellation**: Cancel running or queued jobs via RabbitMQ messaging
 - **Job Duplication**: Duplicate existing jobs with optional parameter overrides
 - **Shell Script Execution**: Submit and execute shell scripts directly
 - **Server Management**: CRUD operations for SSH server configurations
@@ -19,6 +20,26 @@ A Go-based distributed job execution system that accepts job submissions via RES
 
 ## Architecture
 
+### Decoupled Architecture (Recommended)
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   CLI Client    │────│   API Server    │────│   RabbitMQ      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │                         │
+                              │                         │
+                       ┌─────────────────┐    ┌─────────────────┐
+                       │   Database      │    │    Worker       │
+                       │   (SQLite)      │────│                 │
+                       └─────────────────┘    └─────────────────┘
+                                                        │
+                                                        │
+                                              ┌─────────────────┐
+                                              │  Remote Servers │
+                                              │   (via SSH)     │
+                                              └─────────────────┘
+```
+
+### Legacy Monolithic Architecture
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   CLI Client    │────│   REST API      │────│   Job Queue     │
@@ -39,8 +60,60 @@ A Go-based distributed job execution system that accepts job submissions via RES
 
 ## Quick Start
 
-### 1. Build the application
+### Option 1: Decoupled Architecture (Recommended)
 
+#### 1. Start RabbitMQ
+```bash
+# Using Docker Compose
+docker-compose up rabbitmq
+
+# Or using Docker directly
+docker run -d --name rabbitmq \
+  -p 5672:5672 -p 15672:15672 \
+  -e RABBITMQ_DEFAULT_USER=admin \
+  -e RABBITMQ_DEFAULT_PASS=password123 \
+  -e RABBITMQ_DEFAULT_VHOST=job-executor \
+  rabbitmq:3-management
+```
+
+#### 2. Build the applications
+```bash
+# Build both API server and worker
+go build -o bin/job-executor-api ./cmd/api
+go build -o bin/job-executor-worker ./cmd/worker
+
+# Or use the build script
+chmod +x build.sh
+./build.sh
+```
+
+#### 3. Start the services
+```bash
+# Set environment variables (optional)
+export RABBITMQ_URL="amqp://admin:password123@localhost:5672/job-executor"
+export DATABASE_URL="./jobs.db"
+export SERVER_ADDR=":8080"
+
+# Start worker
+./bin/job-executor-worker &
+
+# Start API server
+./bin/job-executor-api &
+
+# Or use the startup script
+chmod +x start-decoupled.sh
+./start-decoupled.sh
+```
+
+#### 4. Test the decoupled setup
+```bash
+chmod +x test-decoupled.sh
+./test-decoupled.sh
+```
+
+### Option 2: Monolithic Architecture (Legacy)
+
+#### 1. Build the application
 ```bash
 # Build the server
 go build -o job-executor main.go

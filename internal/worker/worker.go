@@ -37,10 +37,16 @@ func New(db *gorm.DB, queue queue.Queue, storage storage.StorageService) *Worker
 func (w *Worker) Start(ctx context.Context) {
 	slog.Info("Starting job worker")
 
-	// Start consuming from RabbitMQ queue
+	// Start consuming jobs from RabbitMQ queue
 	if err := w.queue.StartConsumer(ctx, w.processJobWrapper); err != nil {
 		slog.Error("Failed to start queue consumer", "error", err)
 		return
+	}
+
+	// Start consuming cancellation messages
+	if err := w.queue.StartCancelConsumer(ctx, w.handleCancelMessage); err != nil {
+		slog.Error("Failed to start cancel consumer", "error", err)
+		// Continue without cancellation support
 	}
 
 	// Keep worker alive until context is cancelled
@@ -320,6 +326,41 @@ func (w *Worker) CancelJob(jobID string) error {
 	
 	slog.Warn("Attempted to cancel job that is not running", "job_id", jobID)
 	return fmt.Errorf("job %s is not currently running", jobID)
+}
+
+func (w *Worker) handleCancelMessage(jobID string) {
+	slog.Info("Received cancel message", "job_id", jobID)
+	
+	w.mu.RLock()
+	cancel, exists := w.running[jobID]
+	w.mu.RUnlock()
+	
+	if exists {
+		slog.Info("Canceling running job via message", "job_id", jobID)
+		cancel()
+		
+		// Update job status in database
+		job := &models.Job{}
+		if err := w.db.First(job, "id = ?", jobID).Error; err != nil {
+			slog.Error("Failed to fetch job for cancellation", "job_id", jobID, "error", err)
+			return
+		}
+		
+		now := time.Now()
+		job.Status = models.StatusCanceled
+		job.FinishedAt = &now
+		
+		if err := w.db.Save(job).Error; err != nil {
+			slog.Error("Failed to update canceled job status", "job_id", jobID, "error", err)
+			return
+		}
+		
+		slog.Info("Job successfully canceled via message", 
+			"job_id", jobID, 
+			"canceled_at", now.Format(time.RFC3339))
+	} else {
+		slog.Warn("Received cancel message for job that is not running", "job_id", jobID)
+	}
 }
 
 func (w *Worker) removeRunningJob(jobID string) {

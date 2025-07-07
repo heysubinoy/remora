@@ -19,8 +19,19 @@ type API struct {
 	logger  *slog.Logger
 }
 
+// SetupRoutes is the legacy setup function that includes worker dependency
 func SetupRoutes(router *gin.Engine, db *gorm.DB, queue queue.Queue, worker *worker.Worker, storage storage.StorageService, logger *slog.Logger) {
 	api := &API{db: db, queue: queue, worker: worker, storage: storage, logger: logger}
+	setupCommonRoutes(router, api)
+}
+
+// SetupAPIRoutes is the new setup function without worker dependency (for API server)
+func SetupAPIRoutes(router *gin.Engine, db *gorm.DB, queue queue.Queue, storage storage.StorageService, logger *slog.Logger) {
+	api := &API{db: db, queue: queue, worker: nil, storage: storage, logger: logger}
+	setupCommonRoutes(router, api)
+}
+
+func setupCommonRoutes(router *gin.Engine, api *API) {
 
 	v1 := router.Group("/api/v1")
 	{
