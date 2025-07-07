@@ -6,7 +6,8 @@ A Go-based distributed job execution system that accepts job submissions via RES
 
 - **REST API Server**: Built with Gin framework
 - **Remote SSH Execution**: Execute commands on remote servers via SSH
-- **Job Queue & Worker**: Background processing with job queue
+- **RabbitMQ Integration**: Reliable message queuing with automatic fallback to in-memory queue
+- **Job Queue & Worker**: Background processing with persistent job queue
 - **Database Storage**: SQLite/PostgreSQL for job metadata and server configurations
 - **Real-time Status Tracking**: Track job status (queued, running, completed, failed, canceled)
 - **Job Cancellation**: Cancel running or queued jobs
@@ -14,6 +15,7 @@ A Go-based distributed job execution system that accepts job submissions via RES
 - **Shell Script Execution**: Submit and execute shell scripts directly
 - **Server Management**: CRUD operations for SSH server configurations
 - **CLI Client**: Command-line interface for interacting with the API
+- **Horizontal Scaling**: Multiple worker instances can process jobs from the same queue
 
 ## Architecture
 
@@ -128,14 +130,35 @@ The server will start on `http://localhost:8080` by default.
 The application can be configured using environment variables:
 
 ```bash
-export SERVER_ADDR=":8080"           # Server address
-export DATABASE_URL="./jobs.db"      # Database file path
-export SSH_HOST="localhost"          # Default SSH host (optional)
-export SSH_PORT="22"                 # Default SSH port (optional)
-export SSH_USER=""                   # Default SSH user (optional)
-export SSH_PASSWORD=""               # Default SSH password (optional)
-export SSH_PRIVATE_KEY=""            # Default SSH private key path (optional)
+export SERVER_ADDR=":8080"                              # Server address
+export DATABASE_URL="./jobs.db"                         # Database file path
+export RABBITMQ_URL="amqp://guest:guest@localhost:5672/" # RabbitMQ connection URL
+export SSH_HOST="localhost"                             # Default SSH host (optional)
+export SSH_PORT="22"                                    # Default SSH port (optional)
+export SSH_USER=""                                      # Default SSH user (optional)
+export SSH_PASSWORD=""                                  # Default SSH password (optional)
+export SSH_PRIVATE_KEY=""                               # Default SSH private key path (optional)
 ```
+
+### RabbitMQ Setup
+
+The system supports RabbitMQ for reliable job queuing with automatic fallback to in-memory queue:
+
+```bash
+# Start RabbitMQ with Docker
+docker run -d --name rabbitmq \
+  -p 5672:5672 \
+  -p 15672:15672 \
+  rabbitmq:3-management
+
+# Set RabbitMQ URL (optional - defaults to localhost)
+export RABBITMQ_URL="amqp://guest:guest@localhost:5672/"
+
+# Start the application
+./job-executor
+```
+
+If RabbitMQ is unavailable, the system automatically falls back to an in-memory queue. See [RabbitMQ Integration Guide](docs/RABBITMQ_INTEGRATION.md) for detailed setup instructions.
 
 ## Request Formats
 

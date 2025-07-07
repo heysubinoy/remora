@@ -44,8 +44,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize job queue
-	jobQueue := queue.New()
+	// Initialize job queue (RabbitMQ)
+	var jobQueue queue.Queue
+	
+	// Try to connect to RabbitMQ, fallback to in-memory queue if unavailable
+	rabbitQueue, err := queue.NewRabbitMQQueue(cfg.RabbitMQURL)
+	if err != nil {
+		slog.Warn("Failed to connect to RabbitMQ, using in-memory queue", "error", err, "url", cfg.RabbitMQURL)
+		jobQueue = queue.NewInMemoryQueue()
+	} else {
+		slog.Info("Connected to RabbitMQ successfully", "url", cfg.RabbitMQURL)
+		jobQueue = rabbitQueue
+		
+		// Ensure graceful cleanup of RabbitMQ connection
+		defer func() {
+			if closeErr := rabbitQueue.Close(); closeErr != nil {
+				slog.Error("Failed to close RabbitMQ connection", "error", closeErr)
+			}
+		}()
+	}
 
 	// Initialize storage service
 	storageConfig := &storage.StorageConfig{

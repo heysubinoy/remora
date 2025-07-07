@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: job-executor-rabbitmq
+    hostname: job-executor-rabbitmq
+    ports:
+      - "5672:5672" # AMQP port
+      - "15672:15672" # Management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password123
+      RABBITMQ_DEFAULT_VHOST: job-executor
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - job-executor-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Optional: Job Executor service (uncomment to run with Docker)
+  # job-executor:
+  #   build: .
+  #   container_name: job-executor-app
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
+  #     - DATABASE_URL=/app/data/jobs.db
+  #     - SERVER_ADDR=:8080
+  #   volumes:
+  #     - ./data:/app/data
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   networks:
+  #     - job-executor-network
+  #   restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+    driver: local
+
+networks:
+  job-executor-network:
+    driver: bridge

@@ -7,6 +7,7 @@ import (
 type Config struct {
 	ServerAddr  string
 	DatabaseURL string
+	RabbitMQURL string
 	SSH         SSHConfig
 }
 
@@ -23,6 +24,7 @@ func Load() *Config {
 	return &Config{
 		ServerAddr:  getEnv("SERVER_ADDR", ":8080"),
 		DatabaseURL: getEnv("DATABASE_URL", "./jobs.db"),
+		RabbitMQURL: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
 		SSH: SSHConfig{
 			Host:       getEnv("SSH_HOST", "localhost"),
 			Port:       getEnv("SSH_PORT", "22"),

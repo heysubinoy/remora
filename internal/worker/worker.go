@@ -19,13 +19,13 @@ import (
 
 type Worker struct {
 	db      *gorm.DB
-	queue   *queue.Queue
+	queue   queue.Queue
 	storage storage.StorageService
 	running map[string]context.CancelFunc
 	mu      sync.RWMutex
 }
 
-func New(db *gorm.DB, queue *queue.Queue, storage storage.StorageService) *Worker {
+func New(db *gorm.DB, queue queue.Queue, storage storage.StorageService) *Worker {
 	return &Worker{
 		db:      db,
 		queue:   queue,
@@ -37,15 +37,20 @@ func New(db *gorm.DB, queue *queue.Queue, storage storage.StorageService) *Worke
 func (w *Worker) Start(ctx context.Context) {
 	slog.Info("Starting job worker")
 
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("Worker shutting down")
-			return
-		case job := <-w.queue.Pop():
-			go w.processJob(ctx, job)
-		}
+	// Start consuming from RabbitMQ queue
+	if err := w.queue.StartConsumer(ctx, w.processJobWrapper); err != nil {
+		slog.Error("Failed to start queue consumer", "error", err)
+		return
 	}
+
+	// Keep worker alive until context is cancelled
+	<-ctx.Done()
+	slog.Info("Worker shutting down")
+}
+
+func (w *Worker) processJobWrapper(job *models.Job) {
+	ctx := context.Background()
+	go w.processJob(ctx, job)
 }
 
 func (w *Worker) processJob(ctx context.Context, job *models.Job) {

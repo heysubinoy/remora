@@ -13,13 +13,13 @@ import (
 
 type API struct {
 	db      *gorm.DB
-	queue   *queue.Queue
+	queue   queue.Queue
 	worker  *worker.Worker
 	storage storage.StorageService
 	logger  *slog.Logger
 }
 
-func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *worker.Worker, storage storage.StorageService, logger *slog.Logger) {
+func SetupRoutes(router *gin.Engine, db *gorm.DB, queue queue.Queue, worker *worker.Worker, storage storage.StorageService, logger *slog.Logger) {
 	api := &API{db: db, queue: queue, worker: worker, storage: storage, logger: logger}
 
 	v1 := router.Group("/api/v1")
