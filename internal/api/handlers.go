@@ -2,7 +2,9 @@ package api
 
 import (
 	"job-executor/internal/queue"
+	"job-executor/internal/storage"
 	"job-executor/internal/worker"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,13 +12,15 @@ import (
 )
 
 type API struct {
-	db     *gorm.DB
-	queue  *queue.Queue
-	worker *worker.Worker
+	db      *gorm.DB
+	queue   *queue.Queue
+	worker  *worker.Worker
+	storage storage.StorageService
+	logger  *slog.Logger
 }
 
-func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *worker.Worker) {
-	api := &API{db: db, queue: queue, worker: worker}
+func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *worker.Worker, storage storage.StorageService, logger *slog.Logger) {
+	api := &API{db: db, queue: queue, worker: worker, storage: storage, logger: logger}
 
 	v1 := router.Group("/api/v1")
 	{
@@ -39,6 +43,9 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, queue *queue.Queue, worker *wo
 		v1.DELETE("/servers/:id", api.DeleteServer)
 		v1.GET("/servers", api.ListServers)
 		v1.POST("/servers/:id/test", api.TestServerConnection)
+		
+		// PEM file upload route
+		v1.POST("/pem-files/upload", api.UploadPemFile)
 	}
 
 	// Health check endpoint

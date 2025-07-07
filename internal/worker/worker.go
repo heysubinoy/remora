@@ -8,6 +8,7 @@ import (
 	"job-executor/internal/models"
 	"job-executor/internal/queue"
 	"job-executor/internal/ssh"
+	"job-executor/internal/storage"
 	"log/slog"
 	"strings"
 	"sync"
@@ -19,14 +20,16 @@ import (
 type Worker struct {
 	db      *gorm.DB
 	queue   *queue.Queue
+	storage storage.StorageService
 	running map[string]context.CancelFunc
 	mu      sync.RWMutex
 }
 
-func New(db *gorm.DB, queue *queue.Queue, sshConfig config.SSHConfig) *Worker {
+func New(db *gorm.DB, queue *queue.Queue, storage storage.StorageService) *Worker {
 	return &Worker{
 		db:      db,
 		queue:   queue,
+		storage: storage,
 		running: make(map[string]context.CancelFunc),
 	}
 }
@@ -105,15 +108,23 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 		User:       server.User,
 		Password:   server.Password,
 		PrivateKey: server.PrivateKey,
+		PemFileURL: server.PemFileURL,
 	}
 	
-	// Use PEM file if provided
+	// Use PEM file if provided (legacy support)
 	if server.PemFile != "" {
 		sshConfig.PrivateKey = server.PemFile
-		slog.Debug("Using PEM file for authentication", "job_id", job.ID, "pem_file", server.PemFile)
+		slog.Debug("Using PEM file for authentication", "job_id", job.ID)
 	}
 
-	sshClient := ssh.NewClient(sshConfig)
+	// Create SSH client with storage service for PEM file URL support
+	var sshClient *ssh.Client
+	if server.PemFileURL != "" {
+		sshClient = ssh.NewClientWithStorage(sshConfig, w.storage)
+		slog.Debug("Using PEM file URL for authentication", "job_id", job.ID, "pem_file_url", server.PemFileURL)
+	} else {
+		sshClient = ssh.NewClient(sshConfig)
+	}
 
 	// Build full command
 	fullCommand := job.Command

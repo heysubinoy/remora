@@ -16,6 +16,7 @@ type SSHConfig struct {
 	User       string
 	Password   string
 	PrivateKey string
+	PemFileURL string
 }
 
 func Load() *Config {

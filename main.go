@@ -13,11 +13,19 @@ import (
 	"job-executor/internal/config"
 	"job-executor/internal/database"
 	"job-executor/internal/queue"
+	"job-executor/internal/storage"
 	"job-executor/internal/worker"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
 
 func main() {
 	// Initialize structured logger
@@ -39,8 +47,28 @@ func main() {
 	// Initialize job queue
 	jobQueue := queue.New()
 
+	// Initialize storage service
+	storageConfig := &storage.StorageConfig{
+		AWSRegion:    getEnvOrDefault("AWS_REGION", "ap-south-1"),
+		S3Bucket:     getEnvOrDefault("S3_BUCKET", "remora-files"),
+		S3KeyPrefix:  getEnvOrDefault("S3_KEY_PREFIX", "pem-files/"),
+		AWSAccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
+		AWSSecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+	}
+
+	var storageService storage.StorageService
+	s3Service, err := storage.NewS3StorageService(storageConfig, logger)
+	if err != nil {
+		slog.Error("Failed to initialize S3 storage service", "error", err)
+		// Fallback to local storage for development (will return errors)
+		storageService = storage.NewLocalStorageService("./pem-files", logger)
+		slog.Warn("Using local storage service (limited functionality)")
+	} else {
+		storageService = s3Service
+	}
+
 	// Initialize worker
-	jobWorker := worker.New(db, jobQueue, cfg.SSH)
+	jobWorker := worker.New(db, jobQueue, storageService)
 
 	// Start worker in background
 	ctx, cancel := context.WithCancel(context.Background())
@@ -76,7 +104,7 @@ func main() {
 	router.Use(cors.New(corsConfig))
 
 	// Setup API routes
-	api.SetupRoutes(router, db, jobQueue, jobWorker)
+	api.SetupRoutes(router, db, jobQueue, jobWorker, storageService, logger)
 
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,

@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"job-executor/internal/config"
+	"job-executor/internal/storage"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +17,8 @@ import (
 )
 
 type Client struct {
-	config *config.SSHConfig
+	config  *config.SSHConfig
+	storage storage.StorageService
 }
 
 type ExecutionResult struct {
@@ -36,6 +38,10 @@ type StreamingResult struct {
 
 func NewClient(cfg *config.SSHConfig) *Client {
 	return &Client{config: cfg}
+}
+
+func NewClientWithStorage(cfg *config.SSHConfig, storage storage.StorageService) *Client {
+	return &Client{config: cfg, storage: storage}
 }
 
 func (c *Client) Execute(ctx context.Context, command string, timeout time.Duration) (*ExecutionResult, error) {
@@ -72,6 +78,25 @@ func (c *Client) Execute(ctx context.Context, command string, timeout time.Durat
 		signer, err := ssh.ParsePrivateKey(key)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+
+		sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(signer))
+	}
+
+	// Handle PEM file URL (download from object storage)
+	if c.config.PemFileURL != "" {
+		if c.storage == nil {
+			return nil, fmt.Errorf("storage service not available for PEM file URL")
+		}
+
+		key, err := c.storage.DownloadPemFile(ctx, c.config.PemFileURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download PEM file from storage: %w", err)
+		}
+
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse downloaded PEM file: %w", err)
 		}
 
 		sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(signer))
@@ -169,6 +194,25 @@ func (c *Client) ExecuteStreaming(ctx context.Context, command string, timeout t
 		signer, err := ssh.ParsePrivateKey(key)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+
+		sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(signer))
+	}
+
+	// Handle PEM file URL (download from object storage)
+	if c.config.PemFileURL != "" {
+		if c.storage == nil {
+			return nil, fmt.Errorf("storage service not available for PEM file URL")
+		}
+
+		key, err := c.storage.DownloadPemFile(ctx, c.config.PemFileURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download PEM file from storage: %w", err)
+		}
+
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse downloaded PEM file: %w", err)
 		}
 
 		sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(signer))
@@ -282,4 +326,76 @@ func (c *Client) ExecuteStreaming(ctx context.Context, command string, timeout t
 		result.Error = fmt.Errorf("command execution timeout after %v (limit: %v)", executionTime, timeout)
 		return result, result.Error
 	}
+}
+
+// TestConnection tests the SSH connection without executing any commands
+func (c *Client) TestConnection(ctx context.Context) error {
+	// Create SSH client config
+	sshConfig := &ssh.ClientConfig{
+		User:            c.config.User,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+
+	// Configure authentication
+	if c.config.Password != "" {
+		sshConfig.Auth = append(sshConfig.Auth, ssh.Password(c.config.Password))
+	}
+
+	if c.config.PrivateKey != "" {
+		var key []byte
+		var err error
+		
+		if strings.HasPrefix(c.config.PrivateKey, "-----BEGIN") {
+			key = []byte(c.config.PrivateKey)
+		} else {
+			key, err = ioutil.ReadFile(c.config.PrivateKey)
+			if err != nil {
+				return fmt.Errorf("failed to read private key file: %w", err)
+			}
+		}
+
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return fmt.Errorf("failed to parse private key: %w", err)
+		}
+
+		sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(signer))
+	}
+
+	// Handle PEM file URL (download from object storage)
+	if c.config.PemFileURL != "" {
+		if c.storage == nil {
+			return fmt.Errorf("storage service not available for PEM file URL")
+		}
+
+		key, err := c.storage.DownloadPemFile(ctx, c.config.PemFileURL)
+		if err != nil {
+			return fmt.Errorf("failed to download PEM file from storage: %w", err)
+		}
+
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return fmt.Errorf("failed to parse downloaded PEM file: %w", err)
+		}
+
+		sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(signer))
+	}
+
+	// Connect to SSH server
+	addr := fmt.Sprintf("%s:%s", c.config.Host, c.config.Port)
+	conn, err := ssh.Dial("tcp", addr, sshConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to SSH server at %s: %w", addr, err)
+	}
+	defer conn.Close()
+
+	// Test creating a session
+	session, err := conn.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	return nil
 }

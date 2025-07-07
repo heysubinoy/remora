@@ -8,18 +8,19 @@ import (
 )
 
 type Server struct {
-	ID        string    `json:"id" gorm:"primaryKey"`
-	Name      string    `json:"name" gorm:"not null;unique"`
-	Hostname  string    `json:"hostname" gorm:"not null"`
-	Port      int       `json:"port" gorm:"default:22"`
-	User      string    `json:"user" gorm:"not null"`
-	AuthType  string    `json:"auth_type" gorm:"not null"` // "password" or "key"
-	Password  string    `json:"password,omitempty"`
-	PrivateKey string   `json:"private_key,omitempty"`
-	PemFile   string    `json:"pem_file,omitempty"`
-	IsActive  bool      `json:"is_active" gorm:"default:true"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         string    `json:"id" gorm:"primaryKey"`
+	Name       string    `json:"name" gorm:"not null;unique"`
+	Hostname   string    `json:"hostname" gorm:"not null"`
+	Port       int       `json:"port" gorm:"default:22"`
+	User       string    `json:"user" gorm:"not null"`
+	AuthType   string    `json:"auth_type" gorm:"not null"` // "password" or "key"
+	Password   string    `json:"password,omitempty"`
+	PrivateKey string    `json:"private_key,omitempty"`
+	PemFile    string    `json:"pem_file,omitempty"`           // Direct PEM content (deprecated)
+	PemFileURL string    `json:"pem_file_url,omitempty"`       // URL to PEM file in object storage
+	IsActive   bool      `json:"is_active" gorm:"default:true"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func (s *Server) BeforeCreate(tx *gorm.DB) error {
@@ -37,7 +38,8 @@ type ServerRequest struct {
 	AuthType   string `json:"auth_type" binding:"required,oneof=password key"`
 	Password   string `json:"password,omitempty"`
 	PrivateKey string `json:"private_key,omitempty"`
-	PemFile    string `json:"pem_file,omitempty"`
+	PemFile    string `json:"pem_file,omitempty"`     // Direct PEM content (deprecated)
+	PemFileURL string `json:"pem_file_url,omitempty"` // URL to uploaded PEM file
 	IsActive   *bool  `json:"is_active,omitempty"`
 }
 
@@ -49,7 +51,8 @@ type ServerUpdateRequest struct {
 	AuthType   string `json:"auth_type,omitempty"`
 	Password   string `json:"password,omitempty"`
 	PrivateKey string `json:"private_key,omitempty"`
-	PemFile    string `json:"pem_file,omitempty"`
+	PemFile    string `json:"pem_file,omitempty"`     // Direct PEM content (deprecated)
+	PemFileURL string `json:"pem_file_url,omitempty"` // URL to uploaded PEM file
 	IsActive   *bool  `json:"is_active,omitempty"`
 }
 
@@ -58,4 +61,5 @@ type ServerResponse struct {
 	// Don't expose sensitive fields in response
 	Password   string `json:"-"`
 	PrivateKey string `json:"-"`
+	PemFile    string `json:"-"` // Hide direct PEM content
 }

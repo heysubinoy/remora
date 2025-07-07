@@ -1,12 +1,45 @@
 package api
 
 import (
+	"fmt"
+	"job-executor/internal/config"
 	"job-executor/internal/models"
+	"job-executor/internal/ssh"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// UploadPemFile handles PEM file uploads to object storage
+func (api *API) UploadPemFile(c *gin.Context) {
+	file, header, err := c.Request.FormFile("pem_file")
+	if err != nil {
+		api.logger.Error("Failed to get uploaded file", slog.Any("error", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get uploaded file"})
+		return
+	}
+	defer file.Close()
+
+	// Upload to storage service
+	url, err := api.storage.UploadPemFile(c.Request.Context(), file, header.Filename)
+	if err != nil {
+		api.logger.Error("Failed to upload PEM file", slog.Any("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload PEM file"})
+		return
+	}
+
+	api.logger.Info("PEM file uploaded successfully", 
+		slog.String("filename", header.Filename),
+		slog.String("url", url))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "PEM file uploaded successfully",
+		"pem_file_url": url,
+		"filename":     header.Filename,
+	})
+}
 
 func (api *API) CreateServer(c *gin.Context) {
 	var req models.ServerRequest
@@ -31,8 +64,8 @@ func (api *API) CreateServer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Password is required for password authentication"})
 		return
 	}
-	if req.AuthType == "key" && req.PrivateKey == "" && req.PemFile == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Private key or PEM file is required for key authentication"})
+	if req.AuthType == "key" && req.PrivateKey == "" && req.PemFile == "" && req.PemFileURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Private key, PEM file content, or PEM file URL is required for key authentication"})
 		return
 	}
 
@@ -46,6 +79,7 @@ func (api *API) CreateServer(c *gin.Context) {
 		Password:   req.Password,
 		PrivateKey: req.PrivateKey,
 		PemFile:    req.PemFile,
+		PemFileURL: req.PemFileURL,
 		IsActive:   *req.IsActive,
 	}
 
@@ -124,6 +158,9 @@ func (api *API) UpdateServer(c *gin.Context) {
 	if req.PemFile != "" {
 		server.PemFile = req.PemFile
 	}
+	if req.PemFileURL != "" {
+		server.PemFileURL = req.PemFileURL
+	}
 	if req.IsActive != nil {
 		server.IsActive = *req.IsActive
 	}
@@ -133,8 +170,8 @@ func (api *API) UpdateServer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Password is required for password authentication"})
 		return
 	}
-	if server.AuthType == "key" && server.PrivateKey == "" && server.PemFile == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Private key or PEM file is required for key authentication"})
+	if server.AuthType == "key" && server.PrivateKey == "" && server.PemFile == "" && server.PemFileURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Private key, PEM file content, or PEM file URL is required for key authentication"})
 		return
 	}
 
@@ -224,11 +261,51 @@ func (api *API) TestServerConnection(c *gin.Context) {
 		return
 	}
 
-	// TODO: Implement actual SSH connection test
-	// For now, just return a placeholder response
+	// Create SSH client configuration
+	sshConfig := &config.SSHConfig{
+		Host:       server.Hostname,
+		Port:       fmt.Sprintf("%d", server.Port),
+		User:       server.User,
+		Password:   server.Password,
+		PrivateKey: server.PrivateKey,
+		PemFileURL: server.PemFileURL,
+	}
+	
+	// Use PEM file if provided (legacy support)
+	if server.PemFile != "" {
+		sshConfig.PrivateKey = server.PemFile
+	}
+
+	// Create SSH client with storage service if needed
+	var sshClient *ssh.Client
+	if server.PemFileURL != "" {
+		sshClient = ssh.NewClientWithStorage(sshConfig, api.storage)
+	} else {
+		sshClient = ssh.NewClient(sshConfig)
+	}
+
+	// Test the connection
+	if err := sshClient.TestConnection(c.Request.Context()); err != nil {
+		api.logger.Error("SSH connection test failed", 
+			slog.String("server_id", server.ID),
+			slog.String("hostname", server.Hostname),
+			slog.Any("error", err))
+		
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"server_id": server.ID,
+			"status":    "connection_failed",
+			"error":     err.Error(),
+		})
+		return
+	}
+
+	api.logger.Info("SSH connection test successful", 
+		slog.String("server_id", server.ID),
+		slog.String("hostname", server.Hostname))
+
 	c.JSON(http.StatusOK, gin.H{
 		"server_id": server.ID,
-		"status":    "connection_test_not_implemented",
-		"message":   "Connection test feature will be implemented with SSH client",
+		"status":    "connection_successful",
+		"message":   "Successfully connected to the server",
 	})
 }
