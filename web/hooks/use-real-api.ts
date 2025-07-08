@@ -439,51 +439,74 @@ export function useRealJobs(params?: {
 export function useRealSystemStats() {
   const fetchStats = useCallback(async () => {
     try {
-      // Fetch servers and jobs to calculate stats
-      const [serversResponse, jobsResponse] = await Promise.all([
-        api.servers.getServers(),
-        api.jobs.getJobs({ limit: "1000" }), // Get more jobs for accurate stats
-      ]);
+      // Use the enhanced system info endpoint for more accurate and efficient data
+      const systemInfo = await api.system.getSystemInfo();
+      const enhancedSystemInfo = await api.system.getEnhancedSystemInfo();
 
-      const servers = serversResponse.servers;
-      const jobs = jobsResponse.jobs;
-
-      // Calculate stats
-      const totalServers = servers.length;
-      const activeServers = servers.filter((s) => s.is_active).length;
-
-      const runningJobs = jobs.filter((j) => j.status === "running").length;
-      const completedJobs = jobs.filter((j) => j.status === "completed").length;
-      const failedJobs = jobs.filter((j) => j.status === "failed").length;
-      const totalJobs = jobsResponse.pagination.total; // Use actual total from pagination
-
+      // Calculate additional metrics
       const connectionRate =
-        totalServers > 0 ? (activeServers / totalServers) * 100 : 0;
-      const successRate = totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0;
+        systemInfo.total_servers > 0
+          ? (enhancedSystemInfo.connected_servers / systemInfo.total_servers) *
+            100
+          : 0;
 
       return {
-        totalServers,
-        connectedServers: activeServers,
-        runningJobs,
-        completedJobs,
-        failedJobs,
+        totalServers: systemInfo.total_servers,
+        connectedServers: enhancedSystemInfo.connected_servers,
+        disconnectedServers: enhancedSystemInfo.disconnected_servers,
+        runningJobs: systemInfo.running_jobs,
+        completedJobs: systemInfo.completed_jobs,
+        failedJobs: systemInfo.failed_jobs,
+        queuedJobs: systemInfo.queued_jobs,
+        totalJobs: systemInfo.total_jobs,
         connectionRate: Math.round(connectionRate),
-        totalJobs,
-        successRate: Math.round(successRate),
+        successRate: Math.round(systemInfo.success_rate),
+        timestamp: systemInfo.timestamp,
       };
     } catch (error) {
-      // Fallback to health check only
-      await api.system.healthCheck();
-      return {
-        totalServers: 0,
-        connectedServers: 0,
-        runningJobs: 0,
-        completedJobs: 0,
-        failedJobs: 0,
-        connectionRate: 0,
-        totalJobs: 0,
-        successRate: 0,
-      };
+      console.error(
+        "Failed to fetch enhanced system info, trying fallback:",
+        error
+      );
+
+      try {
+        // Fallback to basic system info if enhanced version fails
+        const basicSystemInfo = await api.system.getSystemInfo();
+
+        const connectionRate = 0; // Can't determine without server status
+
+        return {
+          totalServers: basicSystemInfo.total_servers,
+          connectedServers: 0, // Unknown without server status check
+          disconnectedServers: 0, // Unknown without server status check
+          runningJobs: basicSystemInfo.running_jobs,
+          completedJobs: basicSystemInfo.completed_jobs,
+          failedJobs: basicSystemInfo.failed_jobs,
+          queuedJobs: basicSystemInfo.queued_jobs,
+          totalJobs: basicSystemInfo.total_jobs,
+          connectionRate: Math.round(connectionRate),
+          successRate: Math.round(basicSystemInfo.success_rate),
+          timestamp: basicSystemInfo.timestamp,
+        };
+      } catch (fallbackError) {
+        console.error("Both system info endpoints failed:", fallbackError);
+
+        // Final fallback with health check
+        await api.system.healthCheck();
+        return {
+          totalServers: 0,
+          connectedServers: 0,
+          disconnectedServers: 0,
+          runningJobs: 0,
+          completedJobs: 0,
+          failedJobs: 0,
+          queuedJobs: 0,
+          totalJobs: 0,
+          connectionRate: 0,
+          successRate: 0,
+          timestamp: new Date().toISOString(),
+        };
+      }
     }
   }, []);
 
@@ -492,7 +515,7 @@ export function useRealSystemStats() {
     loading,
     error,
   } = useOptimizedPolling(fetchStats, {
-    interval: 10000, // Slower polling for stats since it fetches more data
+    interval: 10000, // Poll every 10 seconds for real-time updates
     enabled: true,
     immediate: true,
   });

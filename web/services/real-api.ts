@@ -1,3 +1,5 @@
+import { SystemInfo, EnhancedSystemInfo } from "@/types";
+
 // Configuration
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
@@ -593,6 +595,51 @@ export const goApi = {
       }
 
       return response.json();
+    },
+
+    // GET /api/v1/system/info
+    async getSystemInfo(): Promise<SystemInfo> {
+      const response = await fetch(buildApiUrl("/api/v1/system/info"), {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      return response.json();
+    },
+
+    // Enhanced system info that includes server connection status
+    async getEnhancedSystemInfo(): Promise<SystemInfo & {
+      connected_servers: number;
+      disconnected_servers: number;
+    }> {
+      try {
+        // Get basic system info and server status in parallel
+        const [systemInfo, serverStatus] = await Promise.all([
+          this.getSystemInfo(),
+          goApi.servers.checkAllServersStatus(true) // Only check active servers
+        ]);
+
+        return {
+          ...systemInfo,
+          connected_servers: serverStatus.connected,
+          disconnected_servers: serverStatus.disconnected,
+        };
+      } catch (error) {
+        // If server status check fails, fall back to basic system info
+        const systemInfo = await this.getSystemInfo();
+        return {
+          ...systemInfo,
+          connected_servers: 0,
+          disconnected_servers: 0,
+        };
+      }
     },
   },
 };

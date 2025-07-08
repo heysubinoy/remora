@@ -516,3 +516,68 @@ func (api *API) CheckAllServersStatus(c *gin.Context) {
 		"servers":       serverStatuses,
 	})
 }
+
+// GetSystemInfo returns system statistics including total servers, jobs, etc.
+func (api *API) GetSystemInfo(c *gin.Context) {
+	var totalServers int64
+	var totalJobs int64
+	var completedJobs int64
+	var runningJobs int64
+	var failedJobs int64
+
+	// Count total servers
+	if err := api.db.Model(&models.Server{}).Count(&totalServers).Error; err != nil {
+		api.logger.Error("Failed to count servers", slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get server count"})
+		return
+	}
+
+	// Count total jobs
+	if err := api.db.Model(&models.Job{}).Count(&totalJobs).Error; err != nil {
+		api.logger.Error("Failed to count jobs", slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get job count"})
+		return
+	}
+
+	// Count completed jobs
+	if err := api.db.Model(&models.Job{}).Where("status = ?", models.StatusCompleted).Count(&completedJobs).Error; err != nil {
+		api.logger.Error("Failed to count completed jobs", slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get completed job count"})
+		return
+	}
+
+	// Count running jobs
+	if err := api.db.Model(&models.Job{}).Where("status = ?", models.StatusRunning).Count(&runningJobs).Error; err != nil {
+		api.logger.Error("Failed to count running jobs", slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get running job count"})
+		return
+	}
+
+	// Count failed jobs
+	if err := api.db.Model(&models.Job{}).Where("status = ?", models.StatusFailed).Count(&failedJobs).Error; err != nil {
+		api.logger.Error("Failed to count failed jobs", slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get failed job count"})
+		return
+	}
+
+	// Calculate queued jobs
+	queuedJobs := totalJobs - completedJobs - runningJobs - failedJobs
+
+	api.logger.Info("System info requested",
+		slog.Int64("total_servers", totalServers),
+		slog.Int64("total_jobs", totalJobs),
+		slog.Int64("completed_jobs", completedJobs),
+		slog.Int64("running_jobs", runningJobs),
+		slog.Int64("failed_jobs", failedJobs))
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_servers":   totalServers,
+		"total_jobs":      totalJobs,
+		"completed_jobs":  completedJobs,
+		"running_jobs":    runningJobs,
+		"failed_jobs":     failedJobs,
+		"queued_jobs":     queuedJobs,
+		"success_rate":    float64(completedJobs) / float64(totalJobs) * 100,
+		"timestamp":       time.Now().Format(time.RFC3339),
+	})
+}

@@ -57,6 +57,9 @@ func setupCommonRoutes(router *gin.Engine, api *API) {
 		v1.GET("/servers/:id/status", api.CheckServerStatus)
 		v1.GET("/servers/status/all", api.CheckAllServersStatus)
 		
+		// System info route
+		v1.GET("/system/info", api.GetSystemInfo)
+		
 		// PEM file upload route
 		v1.POST("/pem-files/upload", api.UploadPemFile)
 	}

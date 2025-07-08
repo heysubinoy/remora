@@ -118,55 +118,37 @@ export default function Dashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Periodic server status check every 5 minutes
+  // Initial server status check when servers are loaded and periodic checks
   useEffect(() => {
     const checkServersStatusPeriodically = async () => {
       if (servers.length > 0) {
         try {
           await checkAllServersStatus();
-          console.log("Periodic server status check completed");
+          console.log("Server status check completed");
         } catch (error) {
-          console.error("Periodic server status check failed:", error);
+          console.error("Server status check failed:", error);
         }
       }
     };
 
-    // Initial check after a delay to allow servers to load
-    const initialTimeout = setTimeout(() => {
-      checkServersStatusPeriodically();
-    }, 10000); // 10 seconds after component mounts
+    // Only run if we have servers
+    if (servers.length > 0) {
+      // Initial check when servers are first loaded
+      const initialTimeout = setTimeout(() => {
+        checkServersStatusPeriodically();
+      }, 1000); // 1 second after servers are loaded
 
-    // Set up periodic check every 5 minutes
-    const intervalId = setInterval(() => {
-      checkServersStatusPeriodically();
-    }, 5 * 60 * 1000); // 5 minutes
+      // Set up periodic check every 5 minutes
+      const intervalId = setInterval(() => {
+        checkServersStatusPeriodically();
+      }, 5 * 60 * 1000); // 5 minutes
 
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(intervalId);
-    };
-  }, [servers.length, checkAllServersStatus]);
-
-  // Check all server statuses when switching to servers tab
-  useEffect(() => {
-    if (activeTab === "servers" && servers.length > 0) {
-      const checkServersOnTabSwitch = async () => {
-        try {
-          await checkAllServersStatus();
-          console.log("Server status check completed on tab switch");
-        } catch (error) {
-          console.error("Server status check failed on tab switch:", error);
-        }
+      return () => {
+        clearTimeout(initialTimeout);
+        clearInterval(intervalId);
       };
-
-      // Small delay to avoid immediate execution when component mounts
-      const timeoutId = setTimeout(() => {
-        checkServersOnTabSwitch();
-      }, 500);
-
-      return () => clearTimeout(timeoutId);
     }
-  }, [activeTab, servers.length, checkAllServersStatus]);
+  }, [servers.length, checkAllServersStatus]);
 
   // Handle server operations with error handling
   const handleAddServer = async (serverData: Omit<ServerType, "id">) => {
@@ -404,6 +386,10 @@ export default function Dashboard() {
 
   const connectedServers = stats?.connectedServers || 0;
   const runningJobs = stats?.runningJobs || 0;
+  const totalServers = stats?.totalServers || 0;
+  const completedJobs = stats?.completedJobs || 0;
+  const failedJobs = stats?.failedJobs || 0;
+  const queuedJobs = stats?.queuedJobs || 0;
 
   return (
     <TooltipProvider>
@@ -435,13 +421,21 @@ export default function Dashboard() {
                 />
                 <div className="flex items-center gap-2 transition-all duration-300">
                   <span className="text-muted-foreground transition-colors duration-200">
-                    {connectedServers} servers online
+                    {connectedServers}/{totalServers} servers online
                   </span>
+                  {statsLoading && (
+                    <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 transition-all duration-300">
                   <span className="text-muted-foreground transition-colors duration-200">
                     {runningJobs} jobs running
                   </span>
+                  {queuedJobs > 0 && (
+                    <span className="text-xs text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                      {queuedJobs} queued
+                    </span>
+                  )}
                 </div>
                 <ApiStatus />
               </div>
@@ -475,35 +469,62 @@ export default function Dashboard() {
         {/* Main content */}
         <main className="container mx-auto p-6 space-y-8">
           {/* Stats cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <AnimatedStatsCard
-              title="Total Servers"
-              value={stats?.totalServers || 0}
-              icon={ServerIcon}
-              color="text-green-500"
-              bgColor="bg-green-500/10"
-            />
-            <AnimatedStatsCard
-              title="Connected"
-              value={connectedServers}
-              icon={Activity}
-              color="text-blue-500"
-              bgColor="bg-blue-500/10"
-            />
-            <AnimatedStatsCard
-              title="Completed"
-              value={stats?.completedJobs || 0}
-              icon={Terminal}
-              color="text-orange-500"
-              bgColor="bg-orange-500/10"
-            />
-            <AnimatedStatsCard
-              title="Running"
-              value={runningJobs}
-              icon={Settings}
-              color="text-purple-500"
-              bgColor="bg-purple-500/10"
-            />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">System Overview</h2>
+              {stats?.timestamp && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className={`h-2 w-2 rounded-full ${statsLoading ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></div>
+                  <span>
+                    Last updated: {new Date(stats.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+              <AnimatedStatsCard
+                title="Total Servers"
+                value={totalServers}
+                icon={ServerIcon}
+                color="text-green-500"
+                bgColor="bg-green-500/10"
+              />
+              <AnimatedStatsCard
+                title="Connected"
+                value={connectedServers}
+                icon={Activity}
+                color="text-blue-500"
+                bgColor="bg-blue-500/10"
+              />
+              <AnimatedStatsCard
+                title="Completed Jobs"
+                value={completedJobs}
+                icon={Terminal}
+                color="text-green-500"
+                bgColor="bg-green-500/10"
+              />
+              <AnimatedStatsCard
+                title="Running Jobs"
+                value={runningJobs}
+                icon={Settings}
+                color="text-purple-500"
+                bgColor="bg-purple-500/10"
+              />
+              <AnimatedStatsCard
+                title="Failed Jobs"
+                value={failedJobs}
+                icon={AlertCircle}
+                color="text-red-500"
+                bgColor="bg-red-500/10"
+              />
+              <AnimatedStatsCard
+                title="Queued Jobs"
+                value={queuedJobs}
+                icon={Database}
+                color="text-orange-500"
+                bgColor="bg-orange-500/10"
+              />
+            </div>
           </div>
 
           {/* Main tabs */}

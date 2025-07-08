@@ -76,3 +76,19 @@ export interface JobFilters {
   page?: number;
   limit?: number;
 }
+
+export interface SystemInfo {
+  total_servers: number;
+  total_jobs: number;
+  completed_jobs: number;
+  running_jobs: number;
+  failed_jobs: number;
+  queued_jobs: number;
+  success_rate: number;
+  timestamp: string;
+}
+
+export interface EnhancedSystemInfo extends SystemInfo {
+  connected_servers: number;
+  disconnected_servers: number;
+}
