@@ -4,11 +4,11 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY web/src/package.json web/src/pnpm-lock.yaml ./
+COPY web/package.json web/pnpm-lock.yaml ./
 RUN npm install -g pnpm && pnpm install
 
 # Copy source code
-COPY web/src/ ./
+COPY web/ ./
 
 # Build the application
 RUN pnpm build
@@ -22,7 +22,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # Copy package files
-COPY web/src/package.json web/src/pnpm-lock.yaml ./
+COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --prod
 
 # Copy built application
