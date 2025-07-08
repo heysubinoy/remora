@@ -23,6 +23,7 @@ type Job struct {
 	Args      string    `json:"args"`
 	ServerID  string    `json:"server_id" gorm:"type:uuid"`
 	Status    JobStatus `json:"status" gorm:"default:queued"`
+	Priority  int       `json:"priority" gorm:"default:5;check:priority >= 1 AND priority <= 10"` // priority 1-10 (10 is highest)
 	Output    string    `json:"output" gorm:"type:text"`    // stdout - using TEXT for large outputs
 	Error     string    `json:"error" gorm:"type:text"`     // stderr - using TEXT for large outputs
 	Stdout    string    `json:"stdout" gorm:"type:text"`    // explicit stdout field
@@ -51,6 +52,7 @@ type JobRequest struct {
 	Args     string `json:"args"`
 	ServerID string `json:"server_id" binding:"required"`
 	Timeout  int    `json:"timeout,omitempty"`
+	Priority int    `json:"priority,omitempty"` // priority 1-10 (10 is highest), defaults to 5
 }
 
 // ScriptJobRequest handles shell script execution
@@ -60,12 +62,14 @@ type ScriptJobRequest struct {
 	ServerID string `json:"server_id" binding:"required"`       // Target server
 	Timeout  int    `json:"timeout,omitempty"`                  // Execution timeout
 	Shell    string `json:"shell,omitempty"`                    // Shell to use (default: /bin/bash)
+	Priority int    `json:"priority,omitempty"`                 // priority 1-10 (10 is highest), defaults to 5
 }
 
 // DuplicateJobRequest handles job duplication
 type DuplicateJobRequest struct {
 	ServerID *string `json:"server_id,omitempty"`               // Optional: change server
 	Timeout  *int    `json:"timeout,omitempty"`                 // Optional: change timeout
+	Priority *int    `json:"priority,omitempty"`                // Optional: change priority
 }
 
 type JobResponse struct {

@@ -84,6 +84,7 @@ export function ScriptExecution({
   const [scriptFile, setScriptFile] = useState<File | null>(null);
   const [arguments_, setArguments] = useState("");
   const [timeout, setTimeoutState] = useState(300);
+  const [priority, setPriority] = useState(5); // Default priority is 5
   const [copied, setCopied] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -212,6 +213,7 @@ export function ScriptExecution({
     setArguments("");
     setSelectedServers([]);
     setTimeoutState(300);
+    setPriority(5); // Reset priority to default
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -244,6 +246,7 @@ export function ScriptExecution({
               args: arguments_.trim() || undefined,
               server_id: serverId,
               timeout: timeout,
+              priority: priority,
               shell: "/bin/bash", // Default shell
             });
           } else {
@@ -253,6 +256,7 @@ export function ScriptExecution({
               args: arguments_.trim() || undefined,
               server_id: serverId,
               timeout: timeout,
+              priority: priority,
             });
           }
 
@@ -656,7 +660,7 @@ Examples:
             </div>
 
             {/* Execution Options */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/30 rounded-lg border">
               <div className="space-y-2">
                 <Label htmlFor="arguments" className="flex items-center gap-2">
                   <Code className="h-4 w-4" />
@@ -692,6 +696,32 @@ Examples:
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="priority" className="flex items-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  Priority
+                </Label>
+                <Select
+                  value={priority.toString()}
+                  onValueChange={(v) => setPriority(Number.parseInt(v))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 - Lowest</SelectItem>
+                    <SelectItem value="2">2 - Very Low</SelectItem>
+                    <SelectItem value="3">3 - Low</SelectItem>
+                    <SelectItem value="4">4 - Below Normal</SelectItem>
+                    <SelectItem value="5">5 - Normal</SelectItem>
+                    <SelectItem value="6">6 - Above Normal</SelectItem>
+                    <SelectItem value="7">7 - High</SelectItem>
+                    <SelectItem value="8">8 - Very High</SelectItem>
+                    <SelectItem value="9">9 - Critical</SelectItem>
+                    <SelectItem value="10">10 - Highest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Execute Button */}
@@ -719,7 +749,8 @@ Examples:
                 {(command.trim() ||
                   selectedServers.length > 0 ||
                   arguments_.trim() ||
-                  timeout !== 300) && (
+                  timeout !== 300 ||
+                  priority !== 5) && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button

@@ -19,6 +19,19 @@ $$ language 'plpgsql';
 -- Note: Tables will be created by GORM auto-migration
 -- This approach ensures schema consistency between Go models and database
 
+-- Add priority column to jobs table if it doesn't exist (for existing installations)
+-- This is safe to run multiple times
+DO $$
+BEGIN
+    -- Check if priority column exists, if not add it
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'jobs' AND column_name = 'priority'
+    ) THEN
+        ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 5 CHECK (priority >= 1 AND priority <= 10);
+    END IF;
+END $$;
+
 -- Test data setup for development and testing
 -- Creates a test server and test job for immediate system verification
 
@@ -52,13 +65,14 @@ VALUES (
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert test job if test server exists (for testing)
-INSERT INTO jobs (id, command, args, server_id, status, timeout, log_level, created_at, updated_at)
+INSERT INTO jobs (id, command, args, server_id, status, priority, timeout, log_level, created_at, updated_at)
 SELECT 
     'test-job-001',
     'echo',
     'Hello from Job Executor Test System!',
     'test-server-001',
     'queued',
+    8,  -- High priority test job
     300,
     'info',
     NOW(),
@@ -67,13 +81,14 @@ WHERE EXISTS (SELECT 1 FROM servers WHERE name = 'Test Server')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert additional test job for system info
-INSERT INTO jobs (id, command, args, server_id, status, timeout, log_level, created_at, updated_at)
+INSERT INTO jobs (id, command, args, server_id, status, priority, timeout, log_level, created_at, updated_at)
 SELECT 
     'test-job-002',
     'whoami',
     '',
     'test-server-001',
     'queued',
+    3,  -- Lower priority test job
     300,
     'info',
     NOW(),

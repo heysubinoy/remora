@@ -95,6 +95,29 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
     );
   };
 
+  const getPriorityBadge = (priority: number) => {
+    const config = {
+      1: { variant: "secondary" as const, className: "bg-gray-500", label: "Lowest" },
+      2: { variant: "secondary" as const, className: "bg-gray-600", label: "Very Low" },
+      3: { variant: "secondary" as const, className: "bg-blue-500", label: "Low" },
+      4: { variant: "secondary" as const, className: "bg-blue-600", label: "Below Normal" },
+      5: { variant: "default" as const, className: "bg-slate-500", label: "Normal" },
+      6: { variant: "default" as const, className: "bg-yellow-500", label: "Above Normal" },
+      7: { variant: "default" as const, className: "bg-orange-500", label: "High" },
+      8: { variant: "default" as const, className: "bg-orange-600", label: "Very High" },
+      9: { variant: "destructive" as const, className: "bg-red-500", label: "Critical" },
+      10: { variant: "destructive" as const, className: "bg-red-600", label: "Highest" },
+    };
+
+    const { variant, className, label } = config[priority as keyof typeof config] || config[5];
+
+    return (
+      <Badge variant={variant} className={`font-mono text-xs ${className}`} title={label}>
+        {priority}
+      </Badge>
+    );
+  };
+
   return (
     <TableRow
       key={job.id}
@@ -116,6 +139,9 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
               : job.command}
           </code>
         </div>
+      </TableCell>
+      <TableCell>
+        {getPriorityBadge(job.priority || 5)}
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2 transition-all duration-300">

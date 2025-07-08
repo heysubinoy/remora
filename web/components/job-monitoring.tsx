@@ -13,6 +13,7 @@ import {
   LogOut,
   Wifi,
   WifiOff,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,17 +105,8 @@ export function JobMonitoring({
   const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Use the streaming hook for live updates
-  const {
-    jobs,
-    streamingJobs,
-    startJobStream,
-    stopJobStream,
-    updateJobs,
-  } = useJobMonitoringStream(
-    initialJobs,
-    onJobUpdate,
-    onJobComplete
-  );
+  const { jobs, streamingJobs, startJobStream, stopJobStream, updateJobs } =
+    useJobMonitoringStream(initialJobs, onJobUpdate, onJobComplete);
 
   const handleSearchChange = (value: string) => {
     setLocalSearchTerm(value);
@@ -178,7 +170,7 @@ export function JobMonitoring({
   // Auto-update selected job when jobs change
   useEffect(() => {
     if (selectedJob) {
-      const updatedJob = jobs.find(job => job.id === selectedJob.id);
+      const updatedJob = jobs.find((job) => job.id === selectedJob.id);
       if (updatedJob) {
         setSelectedJob(updatedJob);
       }
@@ -287,6 +279,7 @@ export function JobMonitoring({
                   <TableHead className="font-semibold">Job ID</TableHead>
                   <TableHead className="font-semibold">Server</TableHead>
                   <TableHead className="font-semibold">Command</TableHead>
+                  <TableHead className="font-semibold">Priority</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                   <TableHead className="font-semibold">Created</TableHead>
                   <TableHead className="font-semibold">Duration</TableHead>
@@ -409,7 +402,7 @@ export function JobMonitoring({
           {selectedJob && (
             <div className="flex-1 overflow-hidden space-y-4 flex flex-col">
               {/* Job Metadata */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm flex-shrink-0">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm flex-shrink-0">
                 <div className="space-y-1">
                   <span className="font-medium text-muted-foreground flex items-center gap-1">
                     <Terminal className="h-3 w-3" />
@@ -428,6 +421,24 @@ export function JobMonitoring({
                     className="capitalize"
                   >
                     {selectedJob.status}
+                  </Badge>
+                </div>
+                <div className="space-y-1">
+                  <span className="font-medium text-muted-foreground flex items-center gap-1">
+                    <Zap className="h-3 w-3" />
+                    Priority
+                  </span>
+                  <Badge
+                    variant={
+                      selectedJob.priority >= 8
+                        ? "destructive"
+                        : selectedJob.priority >= 6
+                        ? "default"
+                        : "secondary"
+                    }
+                    className="font-mono"
+                  >
+                    {selectedJob.priority || 5}
                   </Badge>
                 </div>
                 <div className="space-y-1">

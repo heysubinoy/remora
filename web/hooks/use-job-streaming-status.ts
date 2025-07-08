@@ -6,14 +6,14 @@ import type { Job } from "@/types";
  */
 export const useJobStreamingStatus = (jobs: Job[]) => {
   const streamableJobs = useMemo(() => {
-    return jobs.filter(job => 
-      job.status === "running" || job.status === "queued"
+    return jobs.filter(
+      (job) => job.status === "running" || job.status === "queued"
     );
   }, [jobs]);
 
   const hasStreamingJobs = streamableJobs.length > 0;
-  const streamingJobIds = useMemo(() => 
-    new Set(streamableJobs.map(job => job.id)), 
+  const streamingJobIds = useMemo(
+    () => new Set(streamableJobs.map((job) => job.id)),
     [streamableJobs]
   );
 
@@ -21,7 +21,7 @@ export const useJobStreamingStatus = (jobs: Job[]) => {
     streamableJobs,
     hasStreamingJobs,
     streamingJobIds,
-    runningCount: jobs.filter(job => job.status === "running").length,
-    queuedCount: jobs.filter(job => job.status === "queued").length,
+    runningCount: jobs.filter((job) => job.status === "running").length,
+    queuedCount: jobs.filter((job) => job.status === "queued").length,
   };
 };

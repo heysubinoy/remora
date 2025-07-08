@@ -50,6 +50,7 @@ const convertGoJobToJob = (goJob: GoJob): Job => {
     serverId: goJob.server_id,
     server_id: goJob.server_id,
     serverName: goJob.server?.name || "",
+    priority: goJob.priority || 5, // Default to 5 if not provided
     command: goJob.command + (goJob.args ? ` ${goJob.args}` : ""), // Combined command for display
     originalCommand: goJob.command, // Original command without args
     args: goJob.args,

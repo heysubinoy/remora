@@ -46,6 +46,7 @@ export interface GoJob {
   args: string;
   server_id: string;
   status: "queued" | "running" | "completed" | "failed" | "canceled";
+  priority: number;
   output: string;
   error: string;
   stdout: string;
@@ -66,6 +67,7 @@ export interface JobRequest {
   args?: string;
   server_id: string;
   timeout?: number;
+  priority?: number;
 }
 
 export interface ScriptJobRequest {
@@ -74,11 +76,13 @@ export interface ScriptJobRequest {
   server_id: string;
   timeout?: number;
   shell?: string;
+  priority?: number;
 }
 
 export interface DuplicateJobRequest {
   server_id?: string;
   timeout?: number;
+  priority?: number;
 }
 
 export interface ServerRequest {

@@ -27,14 +27,18 @@ export function StreamingOutput({
 
   // Track output changes and auto-scroll if needed
   useEffect(() => {
-    const currentOutput = [stdout, stderr, error, output].filter(Boolean).join("");
-    
+    const currentOutput = [stdout, stderr, error, output]
+      .filter(Boolean)
+      .join("");
+
     if (currentOutput !== outputRef.current && autoScroll && isStreaming) {
       outputRef.current = currentOutput;
-      
+
       // Scroll to bottom after a short delay to ensure content is rendered
       setTimeout(() => {
-        const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+        const scrollContainer = scrollAreaRef.current?.querySelector(
+          "[data-radix-scroll-area-viewport]"
+        );
         if (scrollContainer) {
           scrollContainer.scrollTop = scrollContainer.scrollHeight;
         }
@@ -100,7 +104,7 @@ export function StreamingOutput({
               {isStreaming ? "Waiting for output..." : "No output available"}
             </div>
           )}
-          
+
           {/* Auto-scroll indicator when streaming */}
           {isStreaming && autoScroll && (
             <div className="text-center py-2">

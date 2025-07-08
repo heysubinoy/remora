@@ -8,6 +8,7 @@ interface JobStatusUpdate {
   command: string;
   args: string;
   server_id: string;
+  priority: number;
   started_at?: string;
   finished_at?: string;
   duration?: string;
@@ -40,12 +41,14 @@ export const useJobMonitoringStream = (
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [streamingJobs, setStreamingJobs] = useState<Set<string>>(new Set());
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map());
-  const jobOutputRef = useRef<Map<string, { stdout: string[]; stderr: string[] }>>(new Map());
+  const jobOutputRef = useRef<
+    Map<string, { stdout: string[]; stderr: string[] }>
+  >(new Map());
 
   // Convert Go backend job to frontend Job type
   const convertJob = useCallback((goJob: JobStatusUpdate): Job => {
     const duration = goJob.duration ? parseInt(goJob.duration) / 1000000 : 0; // Convert nanoseconds to milliseconds
-    
+
     return {
       id: goJob.id,
       server_id: goJob.server_id,
@@ -54,6 +57,7 @@ export const useJobMonitoringStream = (
       originalCommand: goJob.command,
       args: goJob.args,
       status: goJob.status,
+      priority: goJob.priority || 5, // Default to 5 if not provided
       created_at: goJob.created_at,
       updated_at: goJob.updated_at,
       started_at: goJob.started_at,
@@ -73,123 +77,131 @@ export const useJobMonitoringStream = (
   }, []);
 
   // Start streaming for a specific job
-  const startJobStream = useCallback((jobId: string) => {
-    if (eventSourcesRef.current.has(jobId)) {
-      return; // Already streaming
-    }
-
-    const url = `${BACKEND_BASE_URL}/api/v1/jobs/${jobId}/stream`;
-    const eventSource = new EventSource(url);
-    eventSourcesRef.current.set(jobId, eventSource);
-    setStreamingJobs(prev => new Set([...prev, jobId]));
-
-    // Initialize output storage for this job
-    if (!jobOutputRef.current.has(jobId)) {
-      jobOutputRef.current.set(jobId, { stdout: [], stderr: [] });
-    }
-
-    eventSource.addEventListener("status", (e) => {
-      try {
-        const statusUpdate: JobStatusUpdate = JSON.parse((e as MessageEvent).data);
-        const updatedJob = convertJob(statusUpdate);
-
-        setJobs(prevJobs => 
-          prevJobs.map(job => 
-            job.id === jobId ? { ...job, ...updatedJob } : job
-          )
-        );
-
-        onJobUpdate?.(updatedJob);
-      } catch (error) {
-        console.error("Failed to parse status update:", error);
+  const startJobStream = useCallback(
+    (jobId: string) => {
+      if (eventSourcesRef.current.has(jobId)) {
+        return; // Already streaming
       }
-    });
 
-    eventSource.addEventListener("output", (e) => {
-      try {
-        const outputEvent: OutputEvent = JSON.parse((e as MessageEvent).data);
-        
-        // Store the output
-        const jobOutput = jobOutputRef.current.get(jobId);
-        if (jobOutput) {
-          if (outputEvent.is_stderr) {
-            jobOutput.stderr.push(outputEvent.output);
-          } else {
-            jobOutput.stdout.push(outputEvent.output);
+      const url = `${BACKEND_BASE_URL}/api/v1/jobs/${jobId}/stream`;
+      const eventSource = new EventSource(url);
+      eventSourcesRef.current.set(jobId, eventSource);
+      setStreamingJobs((prev) => new Set([...prev, jobId]));
+
+      // Initialize output storage for this job
+      if (!jobOutputRef.current.has(jobId)) {
+        jobOutputRef.current.set(jobId, { stdout: [], stderr: [] });
+      }
+
+      eventSource.addEventListener("status", (e) => {
+        try {
+          const statusUpdate: JobStatusUpdate = JSON.parse(
+            (e as MessageEvent).data
+          );
+          const updatedJob = convertJob(statusUpdate);
+
+          setJobs((prevJobs) =>
+            prevJobs.map((job) =>
+              job.id === jobId ? { ...job, ...updatedJob } : job
+            )
+          );
+
+          onJobUpdate?.(updatedJob);
+        } catch (error) {
+          console.error("Failed to parse status update:", error);
+        }
+      });
+
+      eventSource.addEventListener("output", (e) => {
+        try {
+          const outputEvent: OutputEvent = JSON.parse((e as MessageEvent).data);
+
+          // Store the output
+          const jobOutput = jobOutputRef.current.get(jobId);
+          if (jobOutput) {
+            if (outputEvent.is_stderr) {
+              jobOutput.stderr.push(outputEvent.output);
+            } else {
+              jobOutput.stdout.push(outputEvent.output);
+            }
+
+            // Update the job with accumulated output
+            setJobs((prevJobs) =>
+              prevJobs.map((job) => {
+                if (job.id === jobId) {
+                  return {
+                    ...job,
+                    stdout: jobOutput.stdout.join(""),
+                    stderr: jobOutput.stderr.join(""),
+                    output: [...jobOutput.stdout, ...jobOutput.stderr].join(""),
+                  };
+                }
+                return job;
+              })
+            );
+          }
+        } catch (error) {
+          console.error("Failed to parse output event:", error);
+        }
+      });
+
+      eventSource.addEventListener("complete", (e) => {
+        try {
+          const finalStatus: JobStatusUpdate = JSON.parse(
+            (e as MessageEvent).data
+          );
+          const completedJob = convertJob(finalStatus);
+
+          setJobs((prevJobs) =>
+            prevJobs.map((job) =>
+              job.id === jobId ? { ...job, ...completedJob } : job
+            )
+          );
+
+          onJobComplete?.(completedJob);
+
+          // Show completion notification
+          if (completedJob.status === "completed") {
+            toast({
+              title: "Job Completed",
+              description: `Job ${completedJob.id} finished successfully`,
+              variant: "default",
+            });
+          } else if (completedJob.status === "failed") {
+            toast({
+              title: "Job Failed",
+              description: `Job ${completedJob.id} failed with exit code ${
+                completedJob.exit_code || "unknown"
+              }`,
+              variant: "destructive",
+            });
+          } else if (completedJob.status === "canceled") {
+            toast({
+              title: "Job Canceled",
+              description: `Job ${completedJob.id} was canceled`,
+              variant: "default",
+            });
           }
 
-          // Update the job with accumulated output
-          setJobs(prevJobs => 
-            prevJobs.map(job => {
-              if (job.id === jobId) {
-                return {
-                  ...job,
-                  stdout: jobOutput.stdout.join(""),
-                  stderr: jobOutput.stderr.join(""),
-                  output: [...jobOutput.stdout, ...jobOutput.stderr].join(""),
-                };
-              }
-              return job;
-            })
-          );
+          // Clean up this job's stream
+          stopJobStream(jobId);
+        } catch (error) {
+          console.error("Failed to parse completion event:", error);
         }
-      } catch (error) {
-        console.error("Failed to parse output event:", error);
-      }
-    });
+      });
 
-    eventSource.addEventListener("complete", (e) => {
-      try {
-        const finalStatus: JobStatusUpdate = JSON.parse((e as MessageEvent).data);
-        const completedJob = convertJob(finalStatus);
-
-        setJobs(prevJobs => 
-          prevJobs.map(job => 
-            job.id === jobId ? { ...job, ...completedJob } : job
-          )
-        );
-
-        onJobComplete?.(completedJob);
-        
-        // Show completion notification
-        if (completedJob.status === "completed") {
-          toast({
-            title: "Job Completed",
-            description: `Job ${completedJob.id} finished successfully`,
-            variant: "default",
-          });
-        } else if (completedJob.status === "failed") {
-          toast({
-            title: "Job Failed",
-            description: `Job ${completedJob.id} failed with exit code ${completedJob.exit_code || "unknown"}`,
-            variant: "destructive",
-          });
-        } else if (completedJob.status === "canceled") {
-          toast({
-            title: "Job Canceled",
-            description: `Job ${completedJob.id} was canceled`,
-            variant: "default",
-          });
-        }
-        
-        // Clean up this job's stream
+      eventSource.addEventListener("error", (e) => {
+        console.error(`SSE error for job ${jobId}:`, e);
         stopJobStream(jobId);
-      } catch (error) {
-        console.error("Failed to parse completion event:", error);
-      }
-    });
+      });
 
-    eventSource.addEventListener("error", (e) => {
-      console.error(`SSE error for job ${jobId}:`, e);
-      stopJobStream(jobId);
-    });
-
-    eventSource.onerror = (e) => {
-      console.error(`EventSource error for job ${jobId}:`, e);
-      stopJobStream(jobId);
-    };
-
-  }, [convertJob, onJobUpdate, onJobComplete]);
+      eventSource.onerror = (e) => {
+        console.error(`EventSource error for job ${jobId}:`, e);
+        stopJobStream(jobId);
+      };
+    },
+    [convertJob, onJobUpdate, onJobComplete]
+  );
 
   // Stop streaming for a specific job
   const stopJobStream = useCallback((jobId: string) => {
@@ -197,7 +209,7 @@ export const useJobMonitoringStream = (
     if (eventSource) {
       eventSource.close();
       eventSourcesRef.current.delete(jobId);
-      setStreamingJobs(prev => {
+      setStreamingJobs((prev) => {
         const newSet = new Set(prev);
         newSet.delete(jobId);
         return newSet;
@@ -207,19 +219,19 @@ export const useJobMonitoringStream = (
 
   // Start streams for running jobs when component mounts or jobs change
   useEffect(() => {
-    const runningJobs = jobs.filter(job => 
-      job.status === "running" || job.status === "queued"
+    const runningJobs = jobs.filter(
+      (job) => job.status === "running" || job.status === "queued"
     );
 
-    runningJobs.forEach(job => {
+    runningJobs.forEach((job) => {
       if (!streamingJobs.has(job.id)) {
         startJobStream(job.id);
       }
     });
 
     // Stop streams for jobs that are no longer running
-    streamingJobs.forEach(jobId => {
-      const job = jobs.find(j => j.id === jobId);
+    streamingJobs.forEach((jobId) => {
+      const job = jobs.find((j) => j.id === jobId);
       if (!job || (job.status !== "running" && job.status !== "queued")) {
         stopJobStream(jobId);
       }

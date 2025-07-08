@@ -18,6 +18,9 @@ const (
 	CancelQueueName     = "cancel_queue"
 	CancelExchangeName  = "cancel_exchange"
 	OutputExchangeName  = "output_exchange"
+	
+	// Max priority for job queue (1-10, where 10 is highest)
+	MaxJobPriority = 10
 )
 
 type CancelMessage struct {
@@ -88,14 +91,16 @@ func (q *RabbitMQQueue) setupExchangeAndQueue() error {
 		return fmt.Errorf("failed to declare job exchange: %w", err)
 	}
 
-	// Declare job queue
+	// Declare job queue with priority support (1-10, where 10 is highest priority)
 	_, err := q.channel.QueueDeclare(
 		QueueName, // name
 		true,      // durable
 		false,     // delete when unused
 		false,     // exclusive
 		false,     // no-wait
-		nil,       // arguments
+		amqp091.Table{
+			"x-max-priority": MaxJobPriority, // Enable priority queue with max priority 10
+		}, // arguments
 	)
 	if err != nil {
 		return fmt.Errorf("failed to declare job queue: %w", err)
@@ -166,7 +171,7 @@ func (q *RabbitMQQueue) setupExchangeAndQueue() error {
 }
 
 func (q *RabbitMQQueue) Push(job *models.Job) error {
-	slog.Info("Attempting to push job to RabbitMQ queue", "job_id", job.ID, "command", job.Command)
+	slog.Info("Attempting to push job to RabbitMQ queue", "job_id", job.ID, "command", job.Command, "priority", job.Priority)
 	
 	q.mu.RLock()
 	defer q.mu.RUnlock()
@@ -176,6 +181,14 @@ func (q *RabbitMQQueue) Push(job *models.Job) error {
 		return fmt.Errorf("queue is closed")
 	}
 
+	// Validate and set default priority if needed
+	priority := job.Priority
+	if priority < 1 || priority > MaxJobPriority {
+		priority = 5 // default priority
+		slog.Warn("Invalid priority, using default", "job_id", job.ID, "invalid_priority", job.Priority, "default_priority", priority)
+		job.Priority = priority
+	}
+
 	// Serialize job to JSON
 	jobBytes, err := json.Marshal(job)
 	if err != nil {
@@ -183,11 +196,11 @@ func (q *RabbitMQQueue) Push(job *models.Job) error {
 		return fmt.Errorf("failed to marshal job: %w", err)
 	}
 
-	// Publish to RabbitMQ
+	// Publish to RabbitMQ with priority
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	slog.Info("Publishing job to RabbitMQ", "job_id", job.ID, "exchange", ExchangeName, "queue", QueueName)
+	slog.Info("Publishing job to RabbitMQ", "job_id", job.ID, "exchange", ExchangeName, "queue", QueueName, "priority", priority)
 	
 	err = q.channel.PublishWithContext(
 		ctx,
@@ -200,6 +213,7 @@ func (q *RabbitMQQueue) Push(job *models.Job) error {
 			ContentType:  "application/json",
 			Body:         jobBytes,
 			Timestamp:    time.Now(),
+			Priority:     uint8(priority), // Set message priority (1-10)
 		},
 	)
 	if err != nil {
@@ -207,7 +221,7 @@ func (q *RabbitMQQueue) Push(job *models.Job) error {
 		return fmt.Errorf("failed to publish job: %w", err)
 	}
 
-	slog.Info("Job published to RabbitMQ", "job_id", job.ID)
+	slog.Info("Job published to RabbitMQ", "job_id", job.ID, "priority", priority)
 	return nil
 }
 

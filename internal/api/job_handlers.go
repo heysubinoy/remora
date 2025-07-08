@@ -39,12 +39,18 @@ func (api *API) SubmitJob(c *gin.Context) {
 		req.Timeout = 300 // 5 minutes default
 	}
 
+	// Set default priority if not provided or invalid
+	if req.Priority < 1 || req.Priority > 10 {
+		req.Priority = 5 // default priority
+	}
+
 	// Create job
 	job := &models.Job{
 		Command:  req.Command,
 		Args:     req.Args,
 		ServerID: req.ServerID,
 		Timeout:  req.Timeout,
+		Priority: req.Priority,
 		Status:   models.StatusQueued,
 	}
 
@@ -96,6 +102,11 @@ func (api *API) SubmitScriptJob(c *gin.Context) {
 		req.Timeout = 300 // 5 minutes default
 	}
 
+	// Set default priority if not provided or invalid
+	if req.Priority < 1 || req.Priority > 10 {
+		req.Priority = 5 // default priority
+	}
+
 	// Set default shell if not provided
 	shell := req.Shell
 	if shell == "" {
@@ -120,6 +131,7 @@ func (api *API) SubmitScriptJob(c *gin.Context) {
 		Args:     args,
 		ServerID: req.ServerID,
 		Timeout:  req.Timeout,
+		Priority: req.Priority,
 		Status:   models.StatusQueued,
 	}
 
@@ -192,12 +204,23 @@ func (api *API) DuplicateJob(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
+	// Determine priority (use override if provided, otherwise use original)
+	priority := originalJob.Priority
+	if req.Priority != nil {
+		priority = *req.Priority
+		// Validate priority range
+		if priority < 1 || priority > 10 {
+			priority = 5 // default priority
+		}
+	}
+
 	// Create duplicated job
 	duplicatedJob := &models.Job{
 		Command:  originalJob.Command,
 		Args:     originalJob.Args,
 		ServerID: serverID,
 		Timeout:  timeout,
+		Priority: priority,
 		Status:   models.StatusQueued,
 		LogLevel: originalJob.LogLevel,
 	}
@@ -467,6 +490,7 @@ func (api *API) ListJobs(c *gin.Context) {
 		"finished_at": true,
 		"status":      true,
 		"command":     true,
+		"priority":    true,
 	}
 	if !validSortFields[sortBy] {
 		sortBy = "created_at"
