@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"job-executor/internal/models"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,6 +53,19 @@ type RabbitMQQueue struct {
 }
 
 func NewRabbitMQQueue(rabbitmqURL string) (*RabbitMQQueue, error) {
+	// Log the RabbitMQ URL for diagnostics
+	slog.Info("Connecting to RabbitMQ", "rabbitmq_url", rabbitmqURL)
+
+	if rabbitmqURL == "" {
+		return nil, fmt.Errorf("RABBITMQ_URL is not set")
+	}
+	if strings.Contains(rabbitmqURL, "localhost") {
+		slog.Warn("RABBITMQ_URL contains 'localhost', which is likely incorrect in Docker Compose", "rabbitmq_url", rabbitmqURL)
+	}
+	if !strings.Contains(rabbitmqURL, "/job-executor") {
+		slog.Warn("RABBITMQ_URL does not contain expected vhost '/job-executor'", "rabbitmq_url", rabbitmqURL)
+	}
+
 	conn, err := amqp091.Dial(rabbitmqURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)
