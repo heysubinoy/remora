@@ -67,6 +67,7 @@ interface JobMonitoringProps {
     sort_order: string;
   };
   onCancel: (jobId: string) => void;
+  onRerun?: (jobId: string) => void;
   onSearch?: (search: string) => void;
   onFilter?: (key: string, value: string) => void;
   onPageChange?: (page: number) => void;
@@ -78,6 +79,7 @@ export function JobMonitoring({
   pagination,
   filters,
   onCancel,
+  onRerun,
   onSearch,
   onFilter,
   onPageChange,
@@ -270,6 +272,7 @@ export function JobMonitoring({
                       job={job}
                       onView={setSelectedJob}
                       onCancel={onCancel}
+                      onRerun={onRerun}
                     />
                   ))
                 )}

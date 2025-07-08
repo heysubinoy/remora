@@ -9,6 +9,7 @@ import {
   StopCircle,
   Trash2,
   Eye,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -20,12 +21,14 @@ interface AnimatedJobRowProps {
   job: Job;
   onView: (job: Job) => void;
   onCancel: (jobId: string) => void;
+  onRerun?: (jobId: string) => void;
 }
 
 export const AnimatedJobRow = memo(function AnimatedJobRow({
   job,
   onView,
   onCancel,
+  onRerun,
 }: AnimatedJobRowProps) {
   // Use the live duration hook for running jobs
   const liveDuration = useLiveDuration(job);
@@ -157,6 +160,18 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
           >
             <Eye className="h-4 w-4" />
           </Button>
+
+          {onRerun && (job.status === "completed" || job.status === "failed" || job.status === "cancelled" || job.status === "canceled") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onRerun(job.id)}
+              className="transition-all duration-200 hover:scale-105 hover:text-blue-500"
+              title="Rerun job"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          )}
 
           {job.status === "running" && (
             <Button

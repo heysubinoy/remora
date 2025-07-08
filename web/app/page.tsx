@@ -76,6 +76,7 @@ export default function Dashboard() {
     isPolling: jobsPolling,
     executeJob,
     cancelJob,
+    rerunJob,
     forceRefresh: refreshJobs,
   } = useRealJobs(jobFilters);
 
@@ -291,6 +292,19 @@ export default function Dashboard() {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to cancel job"
+      );
+    }
+  };
+
+  const handleRerunJob = async (jobId: string) => {
+    try {
+      await rerunJob(jobId);
+      toast.success("Job rerun successfully - new job created");
+      // Reset to first page to see new job
+      setJobFilters((prev) => ({ ...prev, page: 1 }));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rerun job"
       );
     }
   };
@@ -535,6 +549,7 @@ export default function Dashboard() {
                 pagination={pagination}
                 filters={filters}
                 onCancel={handleCancelJob}
+                onRerun={handleRerunJob}
                 onSearch={handleJobSearch}
                 onFilter={handleJobFilter}
                 onPageChange={handleJobPageChange}

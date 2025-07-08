@@ -390,6 +390,24 @@ export function useRealJobs(params?: {
     [forceRefresh]
   );
 
+  const rerunJob = useCallback(
+    async (jobId: string, serverIds?: string[], timeout?: number) => {
+      const options: any = {};
+      if (serverIds && serverIds.length === 1) {
+        options.server_id = serverIds[0];
+      }
+      if (timeout) {
+        options.timeout = timeout;
+      }
+
+      const response = await api.jobs.duplicateJob(jobId, options);
+      // Force refresh to get new job
+      await forceRefresh();
+      return convertGoJobToJob(response.new_job);
+    },
+    [forceRefresh]
+  );
+
   return {
     jobs: jobsData?.jobs || [],
     pagination: jobsData?.pagination || {
@@ -412,6 +430,7 @@ export function useRealJobs(params?: {
     stopPolling,
     executeJob,
     cancelJob,
+    rerunJob,
     forceRefresh,
   };
 }
