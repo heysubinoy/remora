@@ -10,6 +10,7 @@ import {
   Trash2,
   Eye,
   RotateCcw,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -22,6 +23,7 @@ interface AnimatedJobRowProps {
   onView: (job: Job) => void;
   onCancel: (jobId: string) => void;
   onRerun?: (jobId: string) => void;
+  onDuplicate?: (job: Job) => void;
 }
 
 export const AnimatedJobRow = memo(function AnimatedJobRow({
@@ -29,6 +31,7 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
   onView,
   onCancel,
   onRerun,
+  onDuplicate,
 }: AnimatedJobRowProps) {
   // Use the live duration hook for running jobs
   const liveDuration = useLiveDuration(job);
@@ -161,17 +164,33 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
             <Eye className="h-4 w-4" />
           </Button>
 
-          {onRerun && (job.status === "completed" || job.status === "failed" || job.status === "cancelled" || job.status === "canceled") && (
+          {onDuplicate && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onRerun(job.id)}
-              className="transition-all duration-200 hover:scale-105 hover:text-blue-500"
-              title="Rerun job"
+              onClick={() => onDuplicate(job)}
+              className="transition-all duration-200 hover:scale-105 hover:text-purple-500"
+              title="Duplicate job to Execute tab"
             >
-              <RotateCcw className="h-4 w-4" />
+              <Copy className="h-4 w-4" />
             </Button>
           )}
+
+          {onRerun &&
+            (job.status === "completed" ||
+              job.status === "failed" ||
+              job.status === "cancelled" ||
+              job.status === "canceled") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRerun(job.id)}
+                className="transition-all duration-200 hover:scale-105 hover:text-blue-500"
+                title="Rerun job"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            )}
 
           {job.status === "running" && (
             <Button

@@ -50,7 +50,8 @@ const convertGoJobToJob = (goJob: GoJob): Job => {
     serverId: goJob.server_id,
     server_id: goJob.server_id,
     serverName: goJob.server?.name || "",
-    command: goJob.command + (goJob.args ? ` ${goJob.args}` : ""),
+    command: goJob.command + (goJob.args ? ` ${goJob.args}` : ""), // Combined command for display
+    originalCommand: goJob.command, // Original command without args
     args: goJob.args,
     status:
       goJob.status === "queued"

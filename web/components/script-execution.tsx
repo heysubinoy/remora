@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Play,
   Upload,
@@ -13,6 +13,7 @@ import {
   Copy,
   Check,
   Loader2,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +65,9 @@ interface ScriptExecutionProps {
   ) => void;
   onTestConnection?: (serverId: string) => void;
   onJobsUpdate?: () => void; // Callback to refresh jobs list
+  prefilledCommand?: string; // Pre-filled command for duplicating jobs
+  prefilledArgs?: string; // Pre-filled arguments for duplicating jobs
+  prefilledTimeout?: number; // Pre-filled timeout for duplicating jobs
 }
 
 export function ScriptExecution({
@@ -71,6 +75,9 @@ export function ScriptExecution({
   onExecute,
   onTestConnection,
   onJobsUpdate,
+  prefilledCommand,
+  prefilledArgs,
+  prefilledTimeout,
 }: ScriptExecutionProps) {
   const [selectedServers, setSelectedServers] = useState<string[]>([]);
   const [command, setCommand] = useState("");
@@ -82,6 +89,19 @@ export function ScriptExecution({
   const [isDragOver, setIsDragOver] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle pre-filled values for job duplication
+  useEffect(() => {
+    if (prefilledCommand) {
+      setCommand(prefilledCommand);
+    }
+    if (prefilledArgs) {
+      setArguments(prefilledArgs);
+    }
+    if (prefilledTimeout) {
+      setTimeoutState(prefilledTimeout);
+    }
+  }, [prefilledCommand, prefilledArgs, prefilledTimeout]);
 
   const connectedServers = servers;
 
@@ -184,6 +204,22 @@ export function ScriptExecution({
     await navigator.clipboard.writeText(command);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const resetForm = () => {
+    setCommand("");
+    setScriptFile(null);
+    setArguments("");
+    setSelectedServers([]);
+    setTimeoutState(300);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    toast({
+      title: "Form Reset",
+      description: "All fields have been cleared",
+      variant: "default",
+    });
   };
 
   const handleExecute = async () => {
@@ -407,9 +443,17 @@ export function ScriptExecution({
                         </p>
                       </div>
                       <div className="flex items-center gap-2 pointer-events-none">
-                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                        <div
+                          className={`h-2 w-2 rounded-full ${
+                            server?.status === "connected"
+                              ? "bg-green-500 animate-pulse"
+                              : "bg-red-500"
+                          }`}
+                        />
                         <Badge variant="outline" className="text-xs">
-                          Online
+                          {server?.status === "connected"
+                            ? "Online"
+                            : "Offline"}
                         </Badge>
                       </div>
                     </div>
@@ -456,7 +500,7 @@ Examples:
                     rows={8}
                     className="font-mono text-sm resize-none terminal-style"
                   />
-                  {command && !scriptFile && (
+                  {/* {command && !scriptFile && (
                     <div className="mt-2 p-3 bg-muted/50 rounded-lg border">
                       <div className="text-xs text-muted-foreground mb-1">
                         Preview:
@@ -468,7 +512,7 @@ Examples:
                         }}
                       />
                     </div>
-                  )}
+                  )} */}
                 </div>
 
                 {/* Script Upload Section */}
@@ -671,26 +715,50 @@ Examples:
                   </div>
                 ) : null}
               </div>
-              <Button
-                onClick={handleExecute}
-                disabled={
-                  selectedServers.length === 0 || !command.trim() || isExecuting
-                }
-                className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                size="lg"
-              >
-                {isExecuting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Executing...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4" />
-                    Execute Script
-                  </>
+              <div className="flex items-center gap-3">
+                {(command.trim() ||
+                  selectedServers.length > 0 ||
+                  arguments_.trim() ||
+                  timeout !== 300) && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={resetForm}
+                        variant="outline"
+                        disabled={isExecuting}
+                        className="flex items-center gap-2"
+                        size="lg"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Reset
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Clear all form fields</TooltipContent>
+                  </Tooltip>
                 )}
-              </Button>
+                <Button
+                  onClick={handleExecute}
+                  disabled={
+                    selectedServers.length === 0 ||
+                    !command.trim() ||
+                    isExecuting
+                  }
+                  className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                  size="lg"
+                >
+                  {isExecuting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Executing...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Execute Script
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

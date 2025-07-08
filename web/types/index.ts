@@ -23,7 +23,8 @@ export interface Job {
   serverId?: string; // For frontend compatibility
   server_id: string; // Backend field name
   serverName?: string; // For frontend compatibility
-  command: string;
+  command: string; // Combined command + args for display
+  originalCommand?: string; // Original command without args (for duplication)
   args?: string;
   status: "running" | "completed" | "failed" | "cancelled" | "canceled";
   created?: Date; // For frontend compatibility

@@ -32,7 +32,7 @@ import {
   useRealSystemStats,
 } from "@/hooks/use-real-api";
 import { toast } from "sonner";
-import type { Server as ServerType } from "@/types";
+import type { Server as ServerType, Job } from "@/types";
 import { ApiStatus } from "@/components/api-status";
 import { ConnectionIndicator } from "@/components/connection-indicator";
 import { DebugPanel } from "@/components/debug-panel";
@@ -52,6 +52,13 @@ export default function Dashboard() {
     sort_by: "created_at",
     sort_order: "desc" as "asc" | "desc",
   });
+
+  // State for pre-filling execute tab when duplicating jobs
+  const [prefilledJob, setPrefilledJob] = useState<{
+    command: string;
+    args?: string;
+    timeout: number;
+  } | null>(null);
 
   // Use the real API hooks
   const {
@@ -277,6 +284,8 @@ export default function Dashboard() {
       toast.success("Jobs started successfully");
       // Reset to first page to see new jobs
       setJobFilters((prev) => ({ ...prev, page: 1 }));
+      // Clear pre-filled job data after successful execution
+      setPrefilledJob(null);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to execute jobs"
@@ -307,6 +316,24 @@ export default function Dashboard() {
         error instanceof Error ? error.message : "Failed to rerun job"
       );
     }
+  };
+
+  const handleDuplicateJob = (job: Job) => {
+    // Use the original command (without args) for duplication
+    const command = job.originalCommand || job.command;
+    const args = job.args || "";
+
+    // Set the pre-filled job data
+    setPrefilledJob({
+      command: command,
+      args: args,
+      timeout: job.timeout || 300,
+    });
+
+    // Switch to execution tab
+    setActiveTab("execution");
+
+    toast.success("Job details copied to Execute tab - select servers and run");
   };
 
   // Handle job filtering and pagination
@@ -540,6 +567,9 @@ export default function Dashboard() {
                 onExecute={handleExecuteScript}
                 onTestConnection={handleTestConnection}
                 onJobsUpdate={refreshJobs}
+                prefilledCommand={prefilledJob?.command}
+                prefilledArgs={prefilledJob?.args}
+                prefilledTimeout={prefilledJob?.timeout}
               />
             </TabsContent>
 
@@ -550,6 +580,7 @@ export default function Dashboard() {
                 filters={filters}
                 onCancel={handleCancelJob}
                 onRerun={handleRerunJob}
+                onDuplicate={handleDuplicateJob}
                 onSearch={handleJobSearch}
                 onFilter={handleJobFilter}
                 onPageChange={handleJobPageChange}
