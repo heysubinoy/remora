@@ -316,33 +316,67 @@ export function ScriptExecution({
     }
   };
 
-  const syntaxHighlight = (code: string) => {
-    return (
-      code
-        // Shell keywords and built-ins
-        .replace(
-          /\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|return|exit|break|continue|source|export|local|readonly|declare|set|unset)\b/g,
-          '<span class="text-purple-400 font-semibold">$1</span>'
-        )
-        // Common commands
-        .replace(
-          /\b(sudo|systemctl|docker|npm|yarn|git|curl|wget|ssh|scp|echo|cat|grep|sed|awk|sort|uniq|head|tail|find|ls|cd|mkdir|rm|cp|mv|chmod|chown)\b/g,
-          '<span class="text-blue-400 font-semibold">$1</span>'
-        )
-        // String literals
-        .replace(/(".*?"|'.*?')/g, '<span class="text-green-400">$1</span>')
-        // Comments
-        .replace(/(#.*$)/gm, '<span class="text-gray-500 italic">$1</span>')
-        // Numbers
-        .replace(/\b(\d+)\b/g, '<span class="text-yellow-400">$1</span>')
-        // Variables
-        .replace(
-          /(\$\{?[a-zA-Z_][a-zA-Z0-9_]*\}?)/g,
-          '<span class="text-cyan-400">$1</span>'
-        )
-        // Operators
-        .replace(/([|&;(){}[\]])/g, '<span class="text-pink-400">$1</span>')
-    );
+  const renderHighlightedLine = (line: string): React.ReactNode[] => {
+    // Simple syntax highlighting using React elements instead of dangerouslySetInnerHTML
+    const parts: React.ReactNode[] = [];
+    let remaining = line;
+    let key = 0;
+
+    // Helper function to add highlighted part
+    const addPart = (text: string, className?: string) => {
+      if (text) {
+        parts.push(
+          className ? (
+            <span key={key++} className={className}>
+              {text}
+            </span>
+          ) : (
+            <span key={key++}>{text}</span>
+          )
+        );
+      }
+    };
+
+    // Simple regex-based highlighting
+    const patterns = [
+      // Comments (highest priority)
+      { regex: /(#.*)$/, className: 'text-gray-400 italic' },
+      // String literals
+      { regex: /(".*?"|'.*?')/, className: 'text-green-400' },
+      // Shell keywords
+      { regex: /\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|return|exit|break|continue|source|export|local|readonly|declare|set|unset)\b/, className: 'text-purple-400 font-semibold' },
+      // Common commands
+      { regex: /\b(sudo|systemctl|docker|npm|yarn|git|curl|wget|ssh|scp|echo|cat|grep|sed|awk|sort|uniq|head|tail|find|ls|cd|mkdir|rm|cp|mv|chmod|chown)\b/, className: 'text-blue-400 font-semibold' },
+      // Variables
+      { regex: /(\$\{?[a-zA-Z_][a-zA-Z0-9_]*\}?)/, className: 'text-cyan-400' },
+      // Numbers
+      { regex: /\b(\d+)\b/, className: 'text-yellow-400' },
+      // Operators
+      { regex: /([|&;(){}[\]])/, className: 'text-pink-400' },
+    ];
+
+    // Process each pattern
+    for (const pattern of patterns) {
+      const match = remaining.match(pattern.regex);
+      if (match && match.index !== undefined) {
+        // Add text before match
+        if (match.index > 0) {
+          addPart(remaining.substring(0, match.index));
+        }
+        // Add highlighted match
+        addPart(match[0], pattern.className);
+        // Update remaining text
+        remaining = remaining.substring(match.index + match[0].length);
+        break; // Process one pattern at a time to avoid conflicts
+      }
+    }
+
+    // Add any remaining text
+    if (remaining) {
+      addPart(remaining);
+    }
+
+    return parts.length > 0 ? parts : [<span key={0}>{line}</span>];
   };
 
   return (
@@ -642,12 +676,9 @@ Examples:
                                 <span className="text-muted-foreground/50 mr-4 select-none w-8 text-right">
                                   {index + 1}
                                 </span>
-                                <span
-                                  className="flex-1"
-                                  dangerouslySetInnerHTML={{
-                                    __html: syntaxHighlight(line),
-                                  }}
-                                />
+                                <span className="flex-1">
+                                  {renderHighlightedLine(line)}
+                                </span>
                               </div>
                             ))}
                           </pre>

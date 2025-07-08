@@ -127,12 +127,13 @@ func (api *API) SubmitScriptJob(c *gin.Context) {
 
 	// Create job
 	job := &models.Job{
-		Command:  command,
-		Args:     args,
-		ServerID: req.ServerID,
-		Timeout:  req.Timeout,
-		Priority: req.Priority,
-		Status:   models.StatusQueued,
+		Command:        command,
+		Args:           args,
+		ServerID:       req.ServerID,
+		Timeout:        req.Timeout,
+		Priority:       req.Priority,
+		Status:         models.StatusQueued,
+		OriginalScript: req.Script, // Store the original script content
 	}
 
 	// Save to database

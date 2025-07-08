@@ -28,6 +28,7 @@ type Job struct {
 	Error     string    `json:"error" gorm:"type:text"`     // stderr - using TEXT for large outputs
 	Stdout    string    `json:"stdout" gorm:"type:text"`    // explicit stdout field
 	Stderr    string    `json:"stderr" gorm:"type:text"`    // explicit stderr field
+	OriginalScript string `json:"original_script" gorm:"type:text"` // original script content for script jobs
 	ExitCode  *int      `json:"exit_code"`
 	Timeout   int       `json:"timeout" gorm:"default:300"` // timeout in seconds
 	LogLevel  string    `json:"log_level" gorm:"default:info"` // log level for this job

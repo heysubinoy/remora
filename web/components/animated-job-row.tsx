@@ -134,9 +134,12 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
       <TableCell>
         <div className="max-w-xs">
           <code className="text-sm bg-muted/50 px-2 py-1 rounded font-mono truncate block transition-colors duration-200">
-            {job.command.length > 50
-              ? `${job.command.substring(0, 50)}...`
-              : job.command}
+            {(() => {
+              const displayText = job.original_script || job.command;
+              return displayText.length > 50
+                ? `${displayText.substring(0, 50)}...`
+                : displayText;
+            })()}
           </code>
         </div>
       </TableCell>

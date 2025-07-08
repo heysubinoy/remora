@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -140,6 +141,7 @@ export function JobMonitoring({
         "Job ID",
         "Server",
         "Command",
+        "Priority",
         "Status",
         "Created",
         "Duration",
@@ -149,7 +151,8 @@ export function JobMonitoring({
         [
           job.id,
           job.serverName || "Unknown",
-          `"${job.command}"`,
+          `"${job.original_script || job.command}"`,
+          job.priority || 5,
           job.status,
           job.created ? job.created.toISOString() : "",
           formatDuration(job.duration),
@@ -517,19 +520,37 @@ export function JobMonitoring({
                     {/* Command Section */}
                     <div className="space-y-2">
                       <span className="font-medium text-muted-foreground">
-                        Command
+                        {selectedJob.original_script
+                          ? "Script Content"
+                          : "Command"}
                       </span>
                       <div className="border rounded-lg bg-muted/50 h-32 overflow-hidden">
                         <ScrollArea className="h-full">
                           <code className="block p-3 text-sm font-mono break-all whitespace-pre-wrap">
-                            {selectedJob.command}
-                            {selectedJob.args && ` ${selectedJob.args}`}
+                            {selectedJob.original_script || (
+                              <>
+                                {selectedJob.command}
+                                {selectedJob.args && ` ${selectedJob.args}`}
+                              </>
+                            )}
                           </code>
                         </ScrollArea>
                       </div>
+                      {selectedJob.original_script && selectedJob.args && (
+                        <div className="space-y-1">
+                          <span className="font-medium text-muted-foreground text-xs">
+                            Script Arguments
+                          </span>
+                          <div className="border rounded-lg bg-muted/50 p-2">
+                            <code className="text-xs font-mono">
+                              {selectedJob.args}
+                            </code>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Output Section */}
+                    {/* Output Section with Tabs */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-muted-foreground">
@@ -542,17 +563,177 @@ export function JobMonitoring({
                           </div>
                         )}
                       </div>
-                      <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
-                        <StreamingOutput
-                          stdout={selectedJob.stdout}
-                          stderr={selectedJob.stderr}
-                          error={selectedJob.error}
-                          output={selectedJob.output}
-                          isStreaming={streamingJobs.has(selectedJob.id)}
-                          autoScroll={true}
-                          className="h-[300px]"
-                        />
-                      </div>
+
+                      <Tabs defaultValue="combined" className="w-full">
+                        <TabsList className="grid w-full grid-cols-4 h-10">
+                          <TabsTrigger
+                            value="combined"
+                            className="text-xs font-medium"
+                          >
+                            <span className="flex items-center gap-1">
+                              Combined
+                              {streamingJobs.has(selectedJob.id) && (
+                                <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                              )}
+                            </span>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="stdout"
+                            className="text-xs font-medium"
+                          >
+                            <span className="flex items-center gap-1">
+                              STDOUT
+                              {(selectedJob.stdout &&
+                                selectedJob.stdout.trim()) ||
+                              streamingJobs.has(selectedJob.id) ? (
+                                <span className="ml-1 text-xs bg-green-500/20 text-green-600 px-1 rounded">
+                                  {selectedJob.stdout
+                                    ? selectedJob.stdout
+                                        .split("\n")
+                                        .filter((line) => line.trim()).length
+                                    : streamingJobs.has(selectedJob.id)
+                                    ? "∞"
+                                    : "0"}
+                                </span>
+                              ) : null}
+                            </span>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="stderr"
+                            className="text-xs font-medium"
+                          >
+                            <span className="flex items-center gap-1">
+                              STDERR
+                              {(selectedJob.stderr &&
+                                selectedJob.stderr.trim()) ||
+                              streamingJobs.has(selectedJob.id) ? (
+                                <span className="ml-1 text-xs bg-orange-500/20 text-orange-600 px-1 rounded">
+                                  {selectedJob.stderr
+                                    ? selectedJob.stderr
+                                        .split("\n")
+                                        .filter((line) => line.trim()).length
+                                    : streamingJobs.has(selectedJob.id)
+                                    ? "∞"
+                                    : "0"}
+                                </span>
+                              ) : null}
+                            </span>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="error"
+                            className="text-xs font-medium"
+                          >
+                            <span className="flex items-center gap-1">
+                              ERROR
+                              {(selectedJob.error &&
+                                selectedJob.error.trim()) ||
+                              streamingJobs.has(selectedJob.id) ? (
+                                <span className="ml-1 text-xs bg-red-500/20 text-red-600 px-1 rounded">
+                                  {selectedJob.error
+                                    ? selectedJob.error
+                                        .split("\n")
+                                        .filter((line) => line.trim()).length
+                                    : streamingJobs.has(selectedJob.id)
+                                    ? "∞"
+                                    : "0"}
+                                </span>
+                              ) : null}
+                            </span>
+                          </TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="combined" className="mt-2">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                            <StreamingOutput
+                              stdout={selectedJob.stdout}
+                              stderr={selectedJob.stderr}
+                              error={selectedJob.error}
+                              output={selectedJob.output}
+                              isStreaming={streamingJobs.has(selectedJob.id)}
+                              autoScroll={true}
+                              className="h-[300px]"
+                            />
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent value="stdout" className="mt-2">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                            {streamingJobs.has(selectedJob.id) ? (
+                              <StreamingOutput
+                                stdout={selectedJob.stdout}
+                                isStreaming={true}
+                                autoScroll={true}
+                                className="h-[300px]"
+                              />
+                            ) : (
+                              <ScrollArea className="h-full">
+                                <pre className="p-4 text-sm font-mono text-green-400 whitespace-pre-wrap break-words">
+                                  {selectedJob.stdout || (
+                                    <span className="text-gray-500 italic">
+                                      No stdout output
+                                      {selectedJob.status === "running"
+                                        ? " yet..."
+                                        : ""}
+                                    </span>
+                                  )}
+                                </pre>
+                              </ScrollArea>
+                            )}
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent value="stderr" className="mt-2">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                            {streamingJobs.has(selectedJob.id) ? (
+                              <StreamingOutput
+                                stderr={selectedJob.stderr}
+                                isStreaming={true}
+                                autoScroll={true}
+                                className="h-[300px]"
+                              />
+                            ) : (
+                              <ScrollArea className="h-full">
+                                <pre className="p-4 text-sm font-mono text-orange-400 whitespace-pre-wrap break-words">
+                                  {selectedJob.stderr || (
+                                    <span className="text-gray-500 italic">
+                                      No stderr output
+                                      {selectedJob.status === "running"
+                                        ? " yet..."
+                                        : ""}
+                                    </span>
+                                  )}
+                                </pre>
+                              </ScrollArea>
+                            )}
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent value="error" className="mt-2">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                            {streamingJobs.has(selectedJob.id) ? (
+                              <StreamingOutput
+                                error={selectedJob.error}
+                                isStreaming={true}
+                                autoScroll={true}
+                                className="h-[300px]"
+                              />
+                            ) : (
+                              <ScrollArea className="h-full">
+                                <pre className="p-4 text-sm font-mono text-red-400 whitespace-pre-wrap break-words">
+                                  {selectedJob.error || (
+                                    <span className="text-gray-500 italic">
+                                      No error output
+                                      {selectedJob.status === "running"
+                                        ? " yet..."
+                                        : ""}
+                                    </span>
+                                  )}
+                                </pre>
+                              </ScrollArea>
+                            )}
+                          </div>
+                        </TabsContent>
+                      </Tabs>
                     </div>
                   </div>
                 </ScrollArea>

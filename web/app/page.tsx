@@ -301,8 +301,8 @@ export default function Dashboard() {
   };
 
   const handleDuplicateJob = (job: Job) => {
-    // Use the original command (without args) for duplication
-    const command = job.originalCommand || job.command;
+    // For script jobs, use the original script content; otherwise use the original command
+    const command = job.original_script || job.originalCommand || job.command;
     const args = job.args || "";
 
     // Set the pre-filled job data

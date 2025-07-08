@@ -51,6 +51,7 @@ export interface GoJob {
   error: string;
   stdout: string;
   stderr: string;
+  original_script?: string;
   exit_code?: number;
   timeout: number;
   log_level: string;

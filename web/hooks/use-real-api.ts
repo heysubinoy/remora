@@ -83,6 +83,7 @@ const convertGoJobToJob = (goJob: GoJob): Job => {
     timeout: goJob.timeout,
     logLevel: goJob.log_level,
     log_level: goJob.log_level,
+    original_script: goJob.original_script,
     server: goJob.server ? convertGoServerToServer(goJob.server) : undefined,
   };
 };

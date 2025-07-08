@@ -49,6 +49,7 @@ export interface Job {
   stdout?: string;
   stderr?: string;
   timeout?: number;
+  original_script?: string; // Original script content for script jobs
   logLevel?: string; // For frontend compatibility
   log_level?: string; // Backend field name
   server?: Server; // Embedded server object from backend

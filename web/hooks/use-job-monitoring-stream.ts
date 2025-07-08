@@ -17,6 +17,7 @@ interface JobStatusUpdate {
   error?: string;
   stdout?: string;
   stderr?: string;
+  original_script?: string;
   server?: any;
   created_at: string;
   updated_at: string;
@@ -69,6 +70,7 @@ export const useJobMonitoringStream = (
       error: goJob.error,
       stdout: goJob.stdout,
       stderr: goJob.stderr,
+      original_script: goJob.original_script,
       server: goJob.server,
       created: goJob.created_at ? new Date(goJob.created_at) : undefined,
       startedAt: goJob.started_at ? new Date(goJob.started_at) : undefined,

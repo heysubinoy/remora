@@ -32,6 +32,19 @@ BEGIN
     END IF;
 END $$;
 
+-- Add original_script column to jobs table if it doesn't exist (for script job support)
+-- This is safe to run multiple times
+DO $$
+BEGIN
+    -- Check if original_script column exists, if not add it
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'jobs' AND column_name = 'original_script'
+    ) THEN
+        ALTER TABLE jobs ADD COLUMN original_script TEXT;
+    END IF;
+END $$;
+
 -- Test data setup for development and testing
 -- Creates a test server and test job for immediate system verification
 
@@ -91,6 +104,23 @@ SELECT
     3,  -- Lower priority test job
     300,
     'info',
+    NOW(),
+    NOW()
+WHERE EXISTS (SELECT 1 FROM servers WHERE name = 'Test Server')
+ON CONFLICT (id) DO NOTHING;
+
+-- Insert test script job to demonstrate original_script functionality
+INSERT INTO jobs (id, command, args, server_id, status, priority, timeout, log_level, original_script, created_at, updated_at)
+SELECT 
+    'test-script-job-001',
+    '/bin/bash -c "echo ''IyEvYmluL2Jhc2gKZWNobyAiSGVsbG8gZnJvbSB0ZXN0IHNjcmlwdCEi'' | base64 -d > /tmp/test_script.sh && chmod +x /tmp/test_script.sh && /tmp/test_script.sh && rm -f /tmp/test_script.sh"',
+    '',
+    'test-server-001',
+    'queued',
+    6,  -- Medium-high priority script job
+    300,
+    'info',
+    E'#!/bin/bash\necho "Hello from test script!"',  -- Original script content
     NOW(),
     NOW()
 WHERE EXISTS (SELECT 1 FROM servers WHERE name = 'Test Server')
