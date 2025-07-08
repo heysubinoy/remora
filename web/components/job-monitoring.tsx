@@ -391,21 +391,21 @@ export function JobMonitoring({
 
       {/* Job Details Dialog */}
       <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
-        <DialogContent className="max-w-5xl h-[80vh] flex flex-col">
+        <DialogContent className="max-w-5xl h-[80vh] flex flex-col max-h-[90vh] w-[95vw]">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <Terminal className="h-5 w-5" />
-              Job Details
+            <DialogTitle className="flex items-center gap-2 truncate">
+              <Terminal className="h-5 w-5 flex-shrink-0" />
+              <span className="truncate">Job Details</span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="truncate">
               {selectedJob?.id} • {selectedJob?.serverName || "Unknown Server"}
             </DialogDescription>
           </DialogHeader>
 
           {selectedJob && (
-            <div className="flex-1 overflow-hidden space-y-4 flex flex-col">
+            <div className="flex-1 overflow-hidden space-y-4 flex flex-col min-w-0">
               {/* Job Metadata */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm flex-shrink-0">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm flex-shrink-0 min-w-0">
                 <div className="space-y-1">
                   <span className="font-medium text-muted-foreground flex items-center gap-1">
                     <Terminal className="h-3 w-3" />
@@ -514,9 +514,9 @@ export function JobMonitoring({
               )}
 
               {/* Scrollable Content Section - Everything after Server Details */}
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div className="space-y-4 pr-4">
+              <div className="flex-1 min-h-0 overflow-hidden min-w-0">
+                <ScrollArea className="h-full w-full">
+                  <div className="space-y-4 pr-4 min-w-0">
                     {/* Command Section */}
                     <div className="space-y-2">
                       <span className="font-medium text-muted-foreground">
@@ -524,9 +524,9 @@ export function JobMonitoring({
                           ? "Script Content"
                           : "Command"}
                       </span>
-                      <div className="border rounded-lg bg-muted/50 h-32 overflow-hidden">
-                        <ScrollArea className="h-full">
-                          <code className="block p-3 text-sm font-mono break-all whitespace-pre-wrap">
+                      <div className="border rounded-lg bg-muted/50 h-32 overflow-hidden w-full">
+                        <ScrollArea className="h-full w-full">
+                          <code className="block p-3 text-sm font-mono break-all whitespace-pre-wrap max-w-full overflow-hidden">
                             {selectedJob.original_script || (
                               <>
                                 {selectedJob.command}
@@ -541,8 +541,8 @@ export function JobMonitoring({
                           <span className="font-medium text-muted-foreground text-xs">
                             Script Arguments
                           </span>
-                          <div className="border rounded-lg bg-muted/50 p-2">
-                            <code className="text-xs font-mono">
+                          <div className="border rounded-lg bg-muted/50 p-2 w-full overflow-hidden">
+                            <code className="text-xs font-mono break-all whitespace-pre-wrap max-w-full overflow-hidden">
                               {selectedJob.args}
                             </code>
                           </div>
@@ -551,13 +551,13 @@ export function JobMonitoring({
                     </div>
 
                     {/* Output Section with Tabs */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 min-w-0">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-muted-foreground">
                           Output
                         </span>
                         {streamingJobs.has(selectedJob.id) && (
-                          <div className="flex items-center gap-1 text-xs text-green-500">
+                          <div className="flex items-center gap-1 text-xs text-green-500 flex-shrink-0">
                             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                             Live Updates
                           </div>
@@ -565,28 +565,28 @@ export function JobMonitoring({
                       </div>
 
                       <Tabs defaultValue="combined" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 h-10">
+                        <TabsList className="grid w-full grid-cols-4 h-10 max-w-full">
                           <TabsTrigger
                             value="combined"
-                            className="text-xs font-medium"
+                            className="text-xs font-medium min-w-0 overflow-hidden"
                           >
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 truncate">
                               Combined
                               {streamingJobs.has(selectedJob.id) && (
-                                <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
                               )}
                             </span>
                           </TabsTrigger>
                           <TabsTrigger
                             value="stdout"
-                            className="text-xs font-medium"
+                            className="text-xs font-medium min-w-0 overflow-hidden"
                           >
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 truncate">
                               STDOUT
                               {(selectedJob.stdout &&
                                 selectedJob.stdout.trim()) ||
                               streamingJobs.has(selectedJob.id) ? (
-                                <span className="ml-1 text-xs bg-green-500/20 text-green-600 px-1 rounded">
+                                <span className="ml-1 text-xs bg-green-500/20 text-green-600 px-1 rounded flex-shrink-0">
                                   {selectedJob.stdout
                                     ? selectedJob.stdout
                                         .split("\n")
@@ -600,14 +600,14 @@ export function JobMonitoring({
                           </TabsTrigger>
                           <TabsTrigger
                             value="stderr"
-                            className="text-xs font-medium"
+                            className="text-xs font-medium min-w-0 overflow-hidden"
                           >
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 truncate">
                               STDERR
                               {(selectedJob.stderr &&
                                 selectedJob.stderr.trim()) ||
                               streamingJobs.has(selectedJob.id) ? (
-                                <span className="ml-1 text-xs bg-orange-500/20 text-orange-600 px-1 rounded">
+                                <span className="ml-1 text-xs bg-orange-500/20 text-orange-600 px-1 rounded flex-shrink-0">
                                   {selectedJob.stderr
                                     ? selectedJob.stderr
                                         .split("\n")
@@ -621,14 +621,14 @@ export function JobMonitoring({
                           </TabsTrigger>
                           <TabsTrigger
                             value="error"
-                            className="text-xs font-medium"
+                            className="text-xs font-medium min-w-0 overflow-hidden"
                           >
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 truncate">
                               ERROR
                               {(selectedJob.error &&
                                 selectedJob.error.trim()) ||
                               streamingJobs.has(selectedJob.id) ? (
-                                <span className="ml-1 text-xs bg-red-500/20 text-red-600 px-1 rounded">
+                                <span className="ml-1 text-xs bg-red-500/20 text-red-600 px-1 rounded flex-shrink-0">
                                   {selectedJob.error
                                     ? selectedJob.error
                                         .split("\n")
@@ -643,7 +643,7 @@ export function JobMonitoring({
                         </TabsList>
 
                         <TabsContent value="combined" className="mt-2">
-                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px] w-full">
                             <StreamingOutput
                               stdout={selectedJob.stdout}
                               stderr={selectedJob.stderr}
@@ -651,23 +651,23 @@ export function JobMonitoring({
                               output={selectedJob.output}
                               isStreaming={streamingJobs.has(selectedJob.id)}
                               autoScroll={true}
-                              className="h-[300px]"
+                              className="h-[300px] w-full"
                             />
                           </div>
                         </TabsContent>
 
                         <TabsContent value="stdout" className="mt-2">
-                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px] w-full">
                             {streamingJobs.has(selectedJob.id) ? (
                               <StreamingOutput
                                 stdout={selectedJob.stdout}
                                 isStreaming={true}
                                 autoScroll={true}
-                                className="h-[300px]"
+                                className="h-[300px] w-full"
                               />
                             ) : (
-                              <ScrollArea className="h-full">
-                                <pre className="p-4 text-sm font-mono text-green-400 whitespace-pre-wrap break-words">
+                              <ScrollArea className="h-full w-full">
+                                <pre className="p-4 text-sm font-mono text-green-400 whitespace-pre-wrap break-words break-all max-w-full overflow-hidden">
                                   {selectedJob.stdout || (
                                     <span className="text-gray-500 italic">
                                       No stdout output
@@ -683,17 +683,17 @@ export function JobMonitoring({
                         </TabsContent>
 
                         <TabsContent value="stderr" className="mt-2">
-                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px] w-full">
                             {streamingJobs.has(selectedJob.id) ? (
                               <StreamingOutput
                                 stderr={selectedJob.stderr}
                                 isStreaming={true}
                                 autoScroll={true}
-                                className="h-[300px]"
+                                className="h-[300px] w-full"
                               />
                             ) : (
-                              <ScrollArea className="h-full">
-                                <pre className="p-4 text-sm font-mono text-orange-400 whitespace-pre-wrap break-words">
+                              <ScrollArea className="h-full w-full">
+                                <pre className="p-4 text-sm font-mono text-orange-400 whitespace-pre-wrap break-words break-all max-w-full overflow-hidden">
                                   {selectedJob.stderr || (
                                     <span className="text-gray-500 italic">
                                       No stderr output
@@ -709,17 +709,17 @@ export function JobMonitoring({
                         </TabsContent>
 
                         <TabsContent value="error" className="mt-2">
-                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                          <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px] w-full">
                             {streamingJobs.has(selectedJob.id) ? (
                               <StreamingOutput
                                 error={selectedJob.error}
                                 isStreaming={true}
                                 autoScroll={true}
-                                className="h-[300px]"
+                                className="h-[300px] w-full"
                               />
                             ) : (
-                              <ScrollArea className="h-full">
-                                <pre className="p-4 text-sm font-mono text-red-400 whitespace-pre-wrap break-words">
+                              <ScrollArea className="h-full w-full">
+                                <pre className="p-4 text-sm font-mono text-red-400 whitespace-pre-wrap break-words break-all max-w-full overflow-hidden">
                                   {selectedJob.error || (
                                     <span className="text-gray-500 italic">
                                       No error output

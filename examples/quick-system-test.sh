@@ -5,7 +5,7 @@
 # Author: GitHub Copilot
 # Date: 2025-07-08
 
-BASE_URL="http://localhost:8080/api/v1"
+BASE_URL="https://remora.sbn.lol/api/v1"
 
 # Colors for output
 RED='\033[0;31m'

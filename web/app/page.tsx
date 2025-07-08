@@ -405,7 +405,7 @@ export default function Dashboard() {
                 <div>
                   <h1 className="text-xl font-bold gradient-text">Remora</h1>
                   <p className="text-xs text-muted-foreground transition-colors duration-200">
-                    Server Management & Automation
+                    Distributed Job Execution System
                   </p>
                 </div>
               </div>
