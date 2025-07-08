@@ -246,7 +246,7 @@ export function JobMonitoring({
                   <TableHead className="font-semibold">Duration</TableHead>
                   <TableHead className="font-semibold">Exit Code</TableHead>
                   <TableHead className="text-right font-semibold">
-                    Actions
+                    Details
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -360,7 +360,7 @@ export function JobMonitoring({
           {selectedJob && (
             <div className="flex-1 overflow-hidden space-y-4 flex flex-col">
               {/* Job Metadata */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm flex-shrink-0">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm flex-shrink-0">
                 <div className="space-y-1">
                   <span className="font-medium text-muted-foreground flex items-center gap-1">
                     <Terminal className="h-3 w-3" />
@@ -399,6 +399,17 @@ export function JobMonitoring({
                     {selectedJob.exitCode !== null
                       ? selectedJob.exitCode
                       : "N/A"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <span className="font-medium text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Timeout
+                  </span>
+                  <p className="font-mono">
+                    {selectedJob.timeout 
+                      ? `${selectedJob.timeout}s` 
+                      : "No timeout"}
                   </p>
                 </div>
                 <div className="space-y-1">
