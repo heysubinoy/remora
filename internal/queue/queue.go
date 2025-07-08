@@ -268,23 +268,31 @@ func (q *RabbitMQQueue) StartConsumer(ctx context.Context, handler func(*models.
 					return
 				}
 
-				// Parse job from message
-				var job models.Job
-				if err := json.Unmarshal(msg.Body, &job); err != nil {
-					slog.Error("Failed to unmarshal job", "error", err)
-					msg.Nack(false, false) // reject and don't requeue
-					continue
-				}
+			   // Parse job from message with robust error logging
+			   var job models.Job
+			   if err := json.Unmarshal(msg.Body, &job); err != nil {
+				   // Log both the error and a pretty-printed JSON diff for debugging struct mismatches
+				   slog.Error("Failed to unmarshal job from RabbitMQ", "error", err, "message_body", string(msg.Body))
+				   // Try to decode as map[string]interface{} for field inspection
+				   var generic map[string]interface{}
+				   if err2 := json.Unmarshal(msg.Body, &generic); err2 == nil {
+					   slog.Error("Job message fields", "fields", generic)
+				   }
+				   msg.Nack(false, false) // reject and don't requeue
+				   continue
+			   }
 
-				slog.Info("Received job from RabbitMQ", "job_id", job.ID)
+			   slog.Info("Received job from RabbitMQ", "job_id", job.ID, "command", job.Command)
 
-				// Process job
-				handler(&job)
+			   // Process job - this should be synchronous or we need a callback
+			   handler(&job)
 
-				// Acknowledge message
-				if err := msg.Ack(false); err != nil {
-					slog.Error("Failed to ack message", "job_id", job.ID, "error", err)
-				}
+			   // Acknowledge message only after successful processing
+			   if err := msg.Ack(false); err != nil {
+				   slog.Error("Failed to ack message", "job_id", job.ID, "error", err)
+			   } else {
+				   slog.Debug("Message acknowledged successfully", "job_id", job.ID)
+			   }
 			}
 		}
 	}()

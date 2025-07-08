@@ -122,35 +122,17 @@ func (w *Worker) Start(ctx context.Context) {
 }
 
 func (w *Worker) processJobWrapper(job *models.Job) {
-	// Send job to worker pool via channel
-	select {
-	case w.jobChan <- job:
-		slog.Debug("Job queued for worker pool", "job_id", job.ID, "queue_size", len(w.jobChan))
-	default:
-		// Channel is full, log warning but still try to queue (will block)
-		slog.Warn("Worker pool queue is full, will wait for space", 
-			"job_id", job.ID, 
-			"queue_size", len(w.jobChan),
-			"queue_capacity", cap(w.jobChan))
-		
-		// Use a timeout to avoid blocking indefinitely
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		
-		select {
-		case w.jobChan <- job:
-			slog.Info("Job queued after waiting", "job_id", job.ID)
-		case <-ctx.Done():
-			// Timeout - reject the job
-			slog.Error("Job rejected due to worker pool timeout", "job_id", job.ID)
-			now := time.Now()
-			job.Status = models.StatusFailed
-			job.Error = "Worker pool overloaded - job timed out waiting for worker"
-			job.StartedAt = &now
-			job.FinishedAt = &now
-			w.updateJob(job)
-		}
-	}
+	// For RabbitMQ, we need to process jobs synchronously to ensure proper acknowledgment
+	// The worker pool provides concurrency through multiple consumers, not async processing
+	
+	slog.Info("Processing job directly from RabbitMQ", "job_id", job.ID, "command", job.Command)
+	
+	// Process the job directly in the current goroutine
+	// This ensures the RabbitMQ message is only acknowledged after job completion
+	ctx := context.Background() // Use background context since this is already in a goroutine
+	w.processJob(ctx, job)
+	
+	slog.Debug("Job processing completed, RabbitMQ message can be acknowledged", "job_id", job.ID)
 }
 
 func (w *Worker) processJob(ctx context.Context, job *models.Job) {
