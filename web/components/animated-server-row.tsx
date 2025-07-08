@@ -12,6 +12,7 @@ import {
   Lock,
   AlertTriangle,
   Database,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -35,6 +36,7 @@ interface AnimatedServerRowProps {
   onEdit: (server: Server) => void;
   onDelete: (id: string, force?: boolean) => void;
   onTestConnection?: (serverId: string) => void;
+  onCheckStatus?: (serverId: string) => void;
 }
 
 export const AnimatedServerRow = memo(function AnimatedServerRow({
@@ -42,6 +44,7 @@ export const AnimatedServerRow = memo(function AnimatedServerRow({
   onEdit,
   onDelete,
   onTestConnection,
+  onCheckStatus,
 }: AnimatedServerRowProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
@@ -51,17 +54,21 @@ export const AnimatedServerRow = memo(function AnimatedServerRow({
   const handleDelete = async () => {
     setIsDeleting(true);
     setDeleteError(null);
-    
+
     try {
       await onDelete(server.id, forceDelete);
       setIsDeleteDialogOpen(false);
       setForceDelete(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to delete server";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete server";
       setDeleteError(errorMessage);
-      
+
       // If error mentions job history or active jobs, show force option
-      if (errorMessage.includes("job history") || errorMessage.includes("active jobs")) {
+      if (
+        errorMessage.includes("job history") ||
+        errorMessage.includes("active jobs")
+      ) {
         // Error will be displayed in dialog, user can then check force delete
       } else {
         // For other errors, close dialog and show error via toast (handled by parent)
@@ -178,18 +185,22 @@ export const AnimatedServerRow = memo(function AnimatedServerRow({
             <Edit className="h-4 w-4" />
           </Button>
 
-          {onTestConnection && (
+          {onCheckStatus && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onTestConnection(server.id)}
+              onClick={() => onCheckStatus(server.id)}
               className="transition-all duration-200 hover:scale-105"
+              title="Check server availability (netcat)"
             >
-              <Wifi className="h-4 w-4" />
+              <Activity className="h-4 w-4" />
             </Button>
           )}
 
-          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialog
+            open={isDeleteDialogOpen}
+            onOpenChange={setIsDeleteDialogOpen}
+          >
             <AlertDialogTrigger asChild>
               <Button
                 variant="ghost"
@@ -207,9 +218,10 @@ export const AnimatedServerRow = memo(function AnimatedServerRow({
                 </AlertDialogTitle>
                 <AlertDialogDescription className="space-y-3">
                   <p>
-                    Are you sure you want to delete <strong>"{server.name}"</strong>?
+                    Are you sure you want to delete{" "}
+                    <strong>"{server.name}"</strong>?
                   </p>
-                  
+
                   <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                     <div className="flex items-start gap-2">
                       <Database className="h-4 w-4 text-yellow-600 mt-0.5" />
@@ -218,8 +230,9 @@ export const AnimatedServerRow = memo(function AnimatedServerRow({
                           Job Deletion Warning
                         </p>
                         <p className="text-yellow-700 dark:text-yellow-300 text-xs mt-1">
-                          This will also delete all job history associated with this server.
-                          Active or running jobs will prevent deletion unless forced.
+                          This will also delete all job history associated with
+                          this server. Active or running jobs will prevent
+                          deletion unless forced.
                         </p>
                       </div>
                     </div>
@@ -241,12 +254,15 @@ export const AnimatedServerRow = memo(function AnimatedServerRow({
                     </div>
                   )}
 
-                  {(deleteError?.includes("job history") || deleteError?.includes("active jobs")) && (
+                  {(deleteError?.includes("job history") ||
+                    deleteError?.includes("active jobs")) && (
                     <div className="flex items-center space-x-2 pt-2">
                       <Checkbox
                         id="force-delete"
                         checked={forceDelete}
-                        onCheckedChange={(checked) => setForceDelete(checked as boolean)}
+                        onCheckedChange={(checked) =>
+                          setForceDelete(checked as boolean)
+                        }
                       />
                       <label
                         htmlFor="force-delete"
@@ -263,7 +279,7 @@ export const AnimatedServerRow = memo(function AnimatedServerRow({
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel 
+                <AlertDialogCancel
                   onClick={() => {
                     setDeleteError(null);
                     setForceDelete(false);

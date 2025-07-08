@@ -3,7 +3,7 @@
 import { TableCell } from "@/components/ui/table";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,6 +36,8 @@ interface ServerManagementProps {
   onUpdate: (id: string, updates: Partial<ServerType>) => void;
   onDelete: (id: string, force?: boolean) => void;
   onTestConnection?: (serverId: string) => void;
+  onCheckStatus?: (serverId: string) => void;
+  onCheckAllStatus?: () => void;
 }
 
 export function ServerManagement({
@@ -44,6 +46,8 @@ export function ServerManagement({
   onUpdate,
   onDelete,
   onTestConnection,
+  onCheckStatus,
+  onCheckAllStatus,
 }: ServerManagementProps) {
   const [editingServer, setEditingServer] = useState<ServerType | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -85,12 +89,23 @@ export function ServerManagement({
                 </span>
               </CardDescription>
             </div>
-            <Button
-              onClick={() => setIsAddDialogOpen(true)}
-              className="transition-all duration-200 hover:scale-105"
-            >
-              <Plus className="mr-2 h-4 w-4" /> Add Server
-            </Button>
+            <div className="flex gap-2">
+              {onCheckAllStatus && (
+                <Button
+                  onClick={onCheckAllStatus}
+                  variant="outline"
+                  className="transition-all duration-200 hover:scale-105"
+                >
+                  <Activity className="mr-2 h-4 w-4" /> Check All Status
+                </Button>
+              )}
+              <Button
+                onClick={() => setIsAddDialogOpen(true)}
+                className="transition-all duration-200 hover:scale-105"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Add Server
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -131,6 +146,7 @@ export function ServerManagement({
                       onEdit={handleEdit}
                       onDelete={onDelete}
                       onTestConnection={onTestConnection}
+                      onCheckStatus={onCheckStatus}
                     />
                   ))
                 )}

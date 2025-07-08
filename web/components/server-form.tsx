@@ -92,26 +92,27 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
   const handleFileSelect = async (file: File) => {
     setSelectedFile(file);
     setIsUploading(true);
-    
+
     try {
       // Upload file to backend
       const formData = new FormData();
-      formData.append('pem_file', file);
-      
-      const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8080';
+      formData.append("pem_file", file);
+
+      const serverUrl =
+        process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:8080";
       const response = await fetch(`${serverUrl}/api/v1/pem-files/upload`, {
-        method: 'POST',
+        method: "POST",
         body: formData,
       });
-      
+
       if (!response.ok) {
-        throw new Error('Failed to upload PEM file');
+        throw new Error("Failed to upload PEM file");
       }
-      
+
       const result = await response.json();
       setUploadedPemUrl(result.pem_file_url);
       handleInputChange("sshKeyPath", file.name); // Store filename for display
-      
+
       // Read file content for preview
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -119,11 +120,10 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
         setKeyFileContent(content);
       };
       reader.readAsText(file);
-      
     } catch (error) {
-      console.error('Upload failed:', error);
+      console.error("Upload failed:", error);
       // Handle upload error - could show a toast notification here
-      alert('Failed to upload PEM file. Please try again.');
+      alert("Failed to upload PEM file. Please try again.");
       setSelectedFile(null);
     } finally {
       setIsUploading(false);

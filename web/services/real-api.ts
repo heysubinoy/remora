@@ -208,12 +208,13 @@ export const goApi = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || `HTTP error! status: ${response.status}`;
-        
+        const errorMessage =
+          errorData.error || `HTTP error! status: ${response.status}`;
+
         // Include additional details if available
-        const details = errorData.details ? ` ${errorData.details}` : '';
+        const details = errorData.details ? ` ${errorData.details}` : "";
         const fullError = `${errorMessage}${details}`;
-        
+
         throw new Error(fullError);
       }
 
@@ -237,6 +238,69 @@ export const goApi = {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Connection test failed`);
+      }
+
+      return response.json();
+    },
+
+    // GET /api/v1/servers/:id/status
+    async checkServerStatus(id: string): Promise<{
+      server_id: string;
+      server_name: string;
+      hostname: string;
+      port: number;
+      status: "connected" | "disconnected";
+      message: string;
+      checked_at: string;
+    }> {
+      const response = await fetch(
+        buildApiUrl(`/api/v1/servers/${id}/status`),
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server status check failed`);
+      }
+
+      return response.json();
+    },
+
+    // GET /api/v1/servers/status/all
+    async checkAllServersStatus(active?: boolean): Promise<{
+      total_servers: number;
+      connected: number;
+      disconnected: number;
+      servers: Array<{
+        server_id: string;
+        server_name: string;
+        hostname: string;
+        port: number;
+        status: "connected" | "disconnected";
+        message: string;
+        checked_at: string;
+      }>;
+    }> {
+      const url = buildApiUrlWithParams(
+        "/api/v1/servers/status/all",
+        active !== undefined ? { active: active.toString() } : undefined
+      );
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `All servers status check failed`);
       }
 
       return response.json();

@@ -54,6 +54,8 @@ func setupCommonRoutes(router *gin.Engine, api *API) {
 		v1.DELETE("/servers/:id", api.DeleteServer)
 		v1.GET("/servers", api.ListServers)
 		v1.POST("/servers/:id/test", api.TestServerConnection)
+		v1.GET("/servers/:id/status", api.CheckServerStatus)
+		v1.GET("/servers/status/all", api.CheckAllServersStatus)
 		
 		// PEM file upload route
 		v1.POST("/pem-files/upload", api.UploadPemFile)

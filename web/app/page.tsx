@@ -37,6 +37,7 @@ import { ApiStatus } from "@/components/api-status";
 import { ConnectionIndicator } from "@/components/connection-indicator";
 import { DebugPanel } from "@/components/debug-panel";
 import { ApiTestPanel } from "@/components/api-test-panel";
+import { goApi } from "@/services/real-api";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("execution");
@@ -62,6 +63,8 @@ export default function Dashboard() {
     updateServer,
     deleteServer,
     testConnection,
+    updateServerStatus,
+    checkAllServersStatus,
   } = useRealServers();
 
   const {
@@ -107,6 +110,56 @@ export default function Dashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Periodic server status check every 5 minutes
+  useEffect(() => {
+    const checkServersStatusPeriodically = async () => {
+      if (servers.length > 0) {
+        try {
+          await checkAllServersStatus();
+          console.log("Periodic server status check completed");
+        } catch (error) {
+          console.error("Periodic server status check failed:", error);
+        }
+      }
+    };
+
+    // Initial check after a delay to allow servers to load
+    const initialTimeout = setTimeout(() => {
+      checkServersStatusPeriodically();
+    }, 10000); // 10 seconds after component mounts
+
+    // Set up periodic check every 5 minutes
+    const intervalId = setInterval(() => {
+      checkServersStatusPeriodically();
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(intervalId);
+    };
+  }, [servers.length, checkAllServersStatus]);
+
+  // Check all server statuses when switching to servers tab
+  useEffect(() => {
+    if (activeTab === "servers" && servers.length > 0) {
+      const checkServersOnTabSwitch = async () => {
+        try {
+          await checkAllServersStatus();
+          console.log("Server status check completed on tab switch");
+        } catch (error) {
+          console.error("Server status check failed on tab switch:", error);
+        }
+      };
+
+      // Small delay to avoid immediate execution when component mounts
+      const timeoutId = setTimeout(() => {
+        checkServersOnTabSwitch();
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [activeTab, servers.length, checkAllServersStatus]);
+
   // Handle server operations with error handling
   const handleAddServer = async (serverData: Omit<ServerType, "id">) => {
     try {
@@ -139,7 +192,9 @@ export default function Dashboard() {
     try {
       const result = await deleteServer(id, force);
       if (result.deleted_jobs > 0) {
-        toast.success(`Server deleted successfully. ${result.deleted_jobs} associated job(s) were also removed.`);
+        toast.success(
+          `Server deleted successfully. ${result.deleted_jobs} associated job(s) were also removed.`
+        );
       } else {
         toast.success("Server deleted successfully");
       }
@@ -158,6 +213,53 @@ export default function Dashboard() {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Connection test failed"
+      );
+    }
+  };
+
+  const handleCheckServerStatus = async (id: string) => {
+    try {
+      const result = await goApi.servers.checkServerStatus(id);
+      // Convert the API result to the expected format for updateServerStatus
+      updateServerStatus({
+        id: result.server_id,
+        status: result.status, // This is already "connected" | "disconnected"
+      });
+      toast.success(`Server status: ${result.status}`);
+    } catch (error) {
+      // Update server status to error on failure
+      updateServerStatus({
+        id: id,
+        status: "error",
+      });
+
+      toast.error(
+        error instanceof Error ? error.message : "Server status check failed"
+      );
+    }
+  };
+
+  const handleCheckAllServersStatus = async () => {
+    try {
+      const result = await checkAllServersStatus();
+      // Status updates are already handled in the hook, just show the toast
+      const connectedCount = result.servers.filter(
+        (s) => s.status === "connected"
+      ).length;
+      const disconnectedCount = result.servers.filter(
+        (s) => s.status === "disconnected"
+      ).length;
+      toast.success(
+        `Server Status: ${connectedCount}/${result.total_servers} connected`,
+        {
+          description: `${connectedCount} servers reachable, ${disconnectedCount} unreachable`,
+        }
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "All servers status check failed"
       );
     }
   };
@@ -447,6 +549,8 @@ export default function Dashboard() {
                 onUpdate={handleUpdateServer}
                 onDelete={handleDeleteServer}
                 onTestConnection={handleTestConnection}
+                onCheckStatus={handleCheckServerStatus}
+                onCheckAllStatus={handleCheckAllServersStatus}
               />
             </TabsContent>
             <TabsContent value="api" className="space-y-0">

@@ -7,10 +7,67 @@ import (
 	"job-executor/internal/ssh"
 	"log/slog"
 	"net/http"
+	"os/exec"
+	"runtime"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// ServerStatus represents the status of a server check
+type ServerStatus struct {
+	Status    string    `json:"status"`
+	Message   string    `json:"message"`
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+// checkServerReachability checks if a server is reachable using netcat or platform-specific commands
+func checkServerReachability(hostname string, port int) ServerStatus {
+	checkedAt := time.Now()
+	
+	var cmd *exec.Cmd
+	var cmdDesc string
+	
+	// Use platform-specific commands
+	switch runtime.GOOS {
+	case "windows":
+		// On Windows, use Test-NetConnection PowerShell command
+		psCommand := fmt.Sprintf("Test-NetConnection -ComputerName %s -Port %d -InformationLevel Quiet", hostname, port)
+		cmd = exec.Command("powershell", "-Command", psCommand)
+		cmdDesc = fmt.Sprintf("powershell Test-NetConnection %s:%d", hostname, port)
+	default:
+		// On Unix-like systems, use netcat
+		cmd = exec.Command("nc", "-z", "-v", "-w", "2", hostname, fmt.Sprintf("%d", port))
+		cmdDesc = fmt.Sprintf("nc -z -v -w 2 %s %d", hostname, port)
+	}
+	
+	// Set a timeout for the command
+	timeout := 5 * time.Second
+	timer := time.AfterFunc(timeout, func() {
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+	})
+	defer timer.Stop()
+	
+	// Run the command
+	err := cmd.Run()
+	
+	if err != nil {
+		return ServerStatus{
+			Status:    "disconnected",
+			Message:   fmt.Sprintf("Server %s:%d is not reachable (%s failed: %v)", hostname, port, cmdDesc, err),
+			CheckedAt: checkedAt,
+		}
+	}
+	
+	return ServerStatus{
+		Status:    "connected",
+		Message:   fmt.Sprintf("Server %s:%d is reachable", hostname, port),
+		CheckedAt: checkedAt,
+	}
+}
 
 // UploadPemFile handles PEM file uploads to object storage
 func (api *API) UploadPemFile(c *gin.Context) {
@@ -365,5 +422,97 @@ func (api *API) TestServerConnection(c *gin.Context) {
 		"server_id": server.ID,
 		"status":    "connection_successful",
 		"message":   "Successfully connected to the server",
+	})
+}
+
+// CheckServerStatus checks if a server is reachable using netcat (nc) command
+func (api *API) CheckServerStatus(c *gin.Context) {
+	serverID := c.Param("id")
+
+	var server models.Server
+	if err := api.db.First(&server, "id = ?", serverID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch server"})
+		return
+	}
+
+	// Use netcat to check if port is open
+	status := checkServerReachability(server.Hostname, server.Port)
+	
+	api.logger.Info("Server status check completed", 
+		slog.String("server_id", server.ID),
+		slog.String("hostname", server.Hostname),
+		slog.Int("port", server.Port),
+		slog.String("status", status.Status))
+
+	c.JSON(http.StatusOK, gin.H{
+		"server_id":   server.ID,
+		"server_name": server.Name,
+		"hostname":    server.Hostname,
+		"port":        server.Port,
+		"status":      status.Status,
+		"message":     status.Message,
+		"checked_at":  status.CheckedAt,
+	})
+}
+
+// CheckAllServersStatus checks the status of all servers
+func (api *API) CheckAllServersStatus(c *gin.Context) {
+	var servers []models.Server
+	
+	// Get query parameters
+	active := c.Query("active")
+	
+	query := api.db.Model(&models.Server{})
+	
+	if active != "" {
+		isActive := active == "true"
+		query = query.Where("is_active = ?", isActive)
+	}
+
+	if err := query.Order("created_at DESC").Find(&servers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch servers"})
+		return
+	}
+
+	// Check status for each server
+	var serverStatuses []gin.H
+	for _, server := range servers {
+		status := checkServerReachability(server.Hostname, server.Port)
+		
+		serverStatuses = append(serverStatuses, gin.H{
+			"server_id":   server.ID,
+			"server_name": server.Name,
+			"hostname":    server.Hostname,
+			"port":        server.Port,
+			"status":      status.Status,
+			"message":     status.Message,
+			"checked_at":  status.CheckedAt,
+		})
+	}
+
+	// Count servers by status
+	var connected, disconnected int
+	for _, status := range serverStatuses {
+		if status["status"] == "connected" {
+			connected++
+		} else {
+			disconnected++
+		}
+	}
+
+	api.logger.Info("All servers status check completed", 
+		slog.Int("total_servers", len(servers)),
+		slog.Int("connected", connected),
+		slog.Int("disconnected", disconnected))
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_servers": len(servers),
+		"connected":     connected,
+		"disconnected":  disconnected,
+		"servers":       serverStatuses,
 	})
 }

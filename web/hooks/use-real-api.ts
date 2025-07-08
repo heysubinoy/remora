@@ -25,7 +25,7 @@ const convertGoServerToServer = (goServer: GoServer): Server => ({
   private_key: goServer.private_key,
   password: goServer.password,
   pem_file_url: goServer.pem_file_url,
-  status: "disconnected" as const, // Default status, will be updated by connection tests
+  status: "disconnected" as const, // Default status, will be updated by status checks
   is_active: goServer.is_active,
   created_at: goServer.created_at,
   updated_at: goServer.updated_at,
@@ -135,6 +135,7 @@ export function useRealServers() {
 
   const {
     data: servers,
+    setData: setServers,
     loading,
     error,
     lastUpdated,
@@ -148,6 +149,68 @@ export function useRealServers() {
     immediate: true,
     compareFunction: compareServers,
   });
+
+  const updateServerStatus = (
+    serverUpdate: Partial<Server> & { id: string }
+  ) => {
+    console.log("Updating server status:", serverUpdate);
+    setServers((prev) => {
+      if (!prev) return prev;
+
+      const updated = prev.map((s) =>
+        s.id === serverUpdate.id ? { ...s, ...serverUpdate } : s
+      );
+
+      console.log("Updated servers:", updated);
+      return updated;
+    });
+  };
+
+  const updateMultipleServerStatus = (
+    serverUpdates: Array<{
+      id: string;
+      status: Server["status"];
+      message?: string;
+    }>
+  ) => {
+    console.log("Updating multiple server statuses:", serverUpdates);
+    setServers((prev) => {
+      if (!prev) return prev;
+
+      const updatesMap = new Map(
+        serverUpdates.map((update) => [update.id, update])
+      );
+
+      const updated = prev.map((server) => {
+        const update = updatesMap.get(server.id);
+        return update ? { ...server, status: update.status } : server;
+      });
+
+      console.log("Updated servers:", updated);
+      return updated;
+    });
+  };
+
+  const checkAllServersStatus = useCallback(async () => {
+    try {
+      const response = await api.servers.checkAllServersStatus(true); // Only check active servers
+
+      // Convert API response to the format expected by updateMultipleServerStatus
+      const statusUpdates = response.servers.map((server) => ({
+        id: server.server_id,
+        status: server.status as Server["status"],
+        message: server.message,
+      }));
+
+      // Update all server statuses at once
+      updateMultipleServerStatus(statusUpdates);
+
+      return response;
+    } catch (error) {
+      console.error("Failed to check all servers status:", error);
+      throw error;
+    }
+  }, []);
 
   const addServer = useCallback(
     async (server: Omit<Server, "id">) => {
@@ -234,6 +297,9 @@ export function useRealServers() {
     updateServer,
     deleteServer,
     testConnection,
+    updateServerStatus,
+    updateMultipleServerStatus,
+    checkAllServersStatus,
   };
 }
 
