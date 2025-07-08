@@ -74,4 +74,14 @@ func setupCommonRoutes(router *gin.Engine, api *API) {
 	router.GET("/", func(c *gin.Context) {
 		c.File("./web/index.html")
 	})
+
+	// Debug routes (for troubleshooting)
+	debug := router.Group("/debug")
+	{
+		debug.GET("/health", api.DebugHealth)
+		debug.GET("/queue", api.DebugQueue)
+		debug.GET("/workers", api.DebugWorkers)
+		debug.GET("/env", api.DebugEnvironment)
+		debug.GET("/connections", api.DebugConnections)
+	}
 }

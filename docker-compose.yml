@@ -89,6 +89,8 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
       - LOG_LEVEL=debug
+      - WORKER_CONCURRENCY=10
+      - ENV=production
     volumes:
       - ./data:/app/data
       - ./pem-files:/app/pem-files
@@ -100,23 +102,29 @@ services:
     networks:
       - job-executor-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f job-executor-worker || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Next.js Frontend
-  # job-executor-frontend:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.frontend
-  #   container_name: job-executor-frontend
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - NEXT_PUBLIC_API_URL=http://localhost:8080
-  #     - NODE_ENV=production
-  #   depends_on:
-  #     - job-executor-api
-  #   networks:
-  #     - job-executor-network
-  #   restart: unless-stopped
+  job-executor-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: job-executor-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=production
+    depends_on:
+      - job-executor-api
+    networks:
+      - job-executor-network
+    restart: unless-stopped
 
   # Nginx Reverse Proxy (Optional - for production)
   nginx:

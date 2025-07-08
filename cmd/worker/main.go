@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"job-executor/internal/queue"
 	"job-executor/internal/storage"
 	"job-executor/internal/worker"
+	"gorm.io/gorm"
 )
 
 func getEnvOrDefault(key, defaultValue string) string {
@@ -22,36 +24,92 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
+// Helper function to mask passwords in URLs for logging
+func maskPassword(url string) string {
+	if url == "" {
+		return ""
+	}
+
+	// Replace password with asterisks
+	parts := strings.Split(url, "@")
+	if len(parts) > 1 {
+		// Find the password part
+		userPart := parts[0]
+		if strings.Contains(userPart, ":") {
+			userPassword := strings.Split(userPart, ":")
+			if len(userPassword) > 1 {
+				// Mask the password
+				userPassword[len(userPassword)-1] = "***"
+				parts[0] = strings.Join(userPassword, ":")
+			}
+		}
+		return strings.Join(parts, "@")
+	}
+	return url
+}
+
 func main() {
-	// Initialize structured logger
+	// Initialize structured logger with debug level for better diagnostics
+	logLevel := slog.LevelInfo
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		logLevel = slog.LevelDebug
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: logLevel,
 	}))
 	slog.SetDefault(logger)
 
+	slog.Info("Starting Job Executor Worker",
+		"version", "1.0.0",
+		"log_level", logLevel.String(),
+		"environment", getEnvOrDefault("ENV", "development"))
+
 	// Load configuration
 	cfg := config.Load()
+	slog.Info("Configuration loaded",
+		"database_url", maskPassword(cfg.DatabaseURL),
+		"rabbitmq_url", maskPassword(cfg.RabbitMQURL),
+		"worker_pool_size", cfg.WorkerPoolSize)
 
-	// Initialize database
-	db, err := database.Initialize(cfg.DatabaseURL)
+	// Initialize database with retry logic
+	slog.Info("Initializing database connection...")
+	var db *gorm.DB
+	var err error
+
+	maxDBRetries := 5
+	for attempt := 1; attempt <= maxDBRetries; attempt++ {
+		slog.Info("Database connection attempt", "attempt", attempt, "max_retries", maxDBRetries)
+		db, err = database.Initialize(cfg.DatabaseURL)
+		if err == nil {
+			slog.Info("Database connected successfully", "attempt", attempt)
+			break
+		}
+
+		slog.Error("Database connection failed", "error", err, "attempt", attempt)
+		if attempt < maxDBRetries {
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+		}
+	}
+
 	if err != nil {
-		slog.Error("Failed to initialize database", "error", err)
+		slog.Error("Failed to initialize database after all retries", "error", err, "max_retries", maxDBRetries)
 		os.Exit(1)
 	}
 
 	// Initialize job queue (RabbitMQ) - for consuming jobs
 	var jobQueue queue.Queue
-	
+
 	// Try to connect to RabbitMQ with retries
 	maxRetries := 10
 	retryDelay := 5 * time.Second
-	
+
 	slog.Info("Attempting to connect to RabbitMQ", "url", cfg.RabbitMQURL, "max_retries", maxRetries)
-	
+
 	var rabbitQueue *queue.RabbitMQQueue
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		slog.Info("RabbitMQ connection attempt", "attempt", attempt, "max_retries", maxRetries)
-		
+
 		var connErr error
 		rabbitQueue, connErr = queue.NewRabbitMQQueue(cfg.RabbitMQURL)
 		if connErr == nil {
@@ -59,15 +117,15 @@ func main() {
 			jobQueue = rabbitQueue
 			break
 		}
-		
+
 		slog.Warn("Failed to connect to RabbitMQ", "error", connErr, "attempt", attempt, "max_retries", maxRetries)
-		
+
 		if attempt < maxRetries {
 			slog.Info("Retrying RabbitMQ connection", "retry_delay", retryDelay, "next_attempt", attempt+1)
 			time.Sleep(retryDelay)
 		}
 	}
-	
+
 	if jobQueue == nil {
 		slog.Error("Failed to connect to RabbitMQ after all retries", "max_retries", maxRetries)
 		slog.Error("Worker requires RabbitMQ to function properly")
@@ -105,10 +163,10 @@ func main() {
 
 	// Initialize worker
 	jobWorker := worker.New(db, jobQueue, storageService)
-	
+
 	// Configure worker pool size based on configuration
 	jobWorker.SetWorkerPoolSize(cfg.WorkerPoolSize)
-	
+
 	slog.Info("Worker configured", "worker_pool_size", cfg.WorkerPoolSize)
 
 	// Start worker in background

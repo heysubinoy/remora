@@ -19,7 +19,8 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o job-executor-work
 # Final stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates openssh-client postgresql-client
+# Install necessary packages for debugging and SSH connectivity
+RUN apk --no-cache add ca-certificates openssh-client postgresql-client curl netcat-openbsd procps
 
 WORKDIR /root/
 
@@ -38,5 +39,12 @@ ENV SSH_USER=""
 ENV SSH_PASSWORD=""
 ENV SSH_PRIVATE_KEY=""
 ENV LOG_LEVEL="debug"
+ENV WORKER_CONCURRENCY="10"
+
+# Add health check script
+RUN echo '#!/bin/sh\npgrep -f job-executor-worker || exit 1' > /health.sh && chmod +x /health.sh
+
+# Add debugging script
+RUN echo '#!/bin/sh\necho "=== Worker Container Debug ==="\necho "Process List:"\nps aux\necho "Network Connections:"\nnetstat -an 2>/dev/null || ss -an\necho "Environment:"\nenv | grep -E "(RABBITMQ|DATABASE|LOG)" | sort\necho "DNS Resolution:"\nnslookup rabbitmq 2>/dev/null || echo "nslookup not available"\nnslookup postgres 2>/dev/null || echo "postgres DNS check skipped"\necho "Connectivity Tests:"\nnc -z rabbitmq 5672 && echo "RabbitMQ: OK" || echo "RabbitMQ: FAIL"\nnc -z postgres 5432 && echo "PostgreSQL: OK" || echo "PostgreSQL: FAIL"' > /debug.sh && chmod +x /debug.sh
 
 CMD ["./job-executor-worker"]
