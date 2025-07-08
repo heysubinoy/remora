@@ -12,36 +12,46 @@ const convertGoServerToServer = (goServer: GoServer): Server => ({
   hostname: goServer.hostname,
   port: goServer.port,
   username: goServer.user,
+  user: goServer.user,
   authType:
     goServer.auth_type === "password"
       ? "password"
       : goServer.auth_type === "key"
       ? "ssh-key"
       : "private-key",
+  auth_type: goServer.auth_type,
   sshKeyPath: goServer.pem_file_url,
   privateKeyContent: goServer.private_key,
+  private_key: goServer.private_key,
   password: goServer.password,
+  pem_file_url: goServer.pem_file_url,
   status: "disconnected" as const, // Default status, will be updated by connection tests
+  is_active: goServer.is_active,
+  created_at: goServer.created_at,
+  updated_at: goServer.updated_at,
 });
 
 // Helper function to convert Go job to frontend job type
 const convertGoJobToJob = (goJob: GoJob): Job => {
-  // Parse duration from Go duration string (e.g., "2h30m15s" -> milliseconds)
+  // Calculate duration from timestamps
   let durationMs = 0;
-  if (goJob.duration) {
-    const durationStr = goJob.duration.toString();
-    if (goJob.started_at && goJob.finished_at) {
-      durationMs =
-        new Date(goJob.finished_at).getTime() -
-        new Date(goJob.started_at).getTime();
-    }
+
+  if (goJob.started_at) {
+    const startTime = new Date(goJob.started_at);
+    const endTime = goJob.finished_at
+      ? new Date(goJob.finished_at)
+      : new Date(); // Use current time for running jobs
+
+    durationMs = endTime.getTime() - startTime.getTime();
   }
 
   return {
     id: goJob.id,
     serverId: goJob.server_id,
+    server_id: goJob.server_id,
     serverName: goJob.server?.name || "",
     command: goJob.command + (goJob.args ? ` ${goJob.args}` : ""),
+    args: goJob.args,
     status:
       goJob.status === "queued"
         ? "running"
@@ -51,10 +61,27 @@ const convertGoJobToJob = (goJob: GoJob): Job => {
         ? "completed"
         : goJob.status === "failed"
         ? "failed"
+        : goJob.status === "canceled"
+        ? "cancelled"
         : "cancelled",
     created: new Date(goJob.created_at),
+    created_at: goJob.created_at,
+    updated_at: goJob.updated_at,
+    startedAt: goJob.started_at ? new Date(goJob.started_at) : undefined,
+    started_at: goJob.started_at,
+    finishedAt: goJob.finished_at ? new Date(goJob.finished_at) : undefined,
+    finished_at: goJob.finished_at,
     duration: durationMs,
     exitCode: goJob.exit_code || null,
+    exit_code: goJob.exit_code || null,
+    output: goJob.output,
+    error: goJob.error,
+    stdout: goJob.stdout,
+    stderr: goJob.stderr,
+    timeout: goJob.timeout,
+    logLevel: goJob.log_level,
+    log_level: goJob.log_level,
+    server: goJob.server ? convertGoServerToServer(goJob.server) : undefined,
   };
 };
 
@@ -90,10 +117,12 @@ const compareJobs = (prev: Job[] | null, next: Job[]): boolean => {
       prevJob.serverName === nextJob.serverName &&
       prevJob.command === nextJob.command &&
       prevJob.status === nextJob.status &&
-      prevJob.duration === nextJob.duration &&
       prevJob.exitCode === nextJob.exitCode &&
-      new Date(prevJob.created).getTime() ===
-        new Date(nextJob.created).getTime()
+      (prevJob.created?.getTime() || 0) === (nextJob.created?.getTime() || 0) &&
+      (prevJob.startedAt?.getTime() || 0) ===
+        (nextJob.startedAt?.getTime() || 0) &&
+      (prevJob.finishedAt?.getTime() || 0) ===
+        (nextJob.finishedAt?.getTime() || 0)
     );
   });
 };
@@ -127,15 +156,15 @@ export function useRealServers() {
         name: server.name,
         hostname: server.hostname,
         port: server.port,
-        user: server.username,
+        user: server.username || server.user || "",
         auth_type:
-          server.authType === "password"
+          server.authType === "password" || server.auth_type === "password"
             ? ("password" as const)
             : ("key" as const),
         password: server.password,
-        private_key: server.privateKeyContent,
-        pem_file_url: server.sshKeyPath,
-        is_active: true,
+        private_key: server.privateKeyContent || server.private_key,
+        pem_file_url: server.sshKeyPath || server.pem_file_url,
+        is_active: server.is_active ?? true,
       };
 
       const response = await api.servers.createServer(goServerRequest);
@@ -208,14 +237,36 @@ export function useRealServers() {
   };
 }
 
-export function useRealJobs() {
+export function useRealJobs(params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  server_id?: string;
+  search?: string;
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
+}) {
   const fetchJobs = useCallback(async () => {
-    const response = await api.jobs.getJobs();
-    return response.jobs.map(convertGoJobToJob);
-  }, []);
+    const queryParams = {
+      page: params?.page?.toString() || "1",
+      limit: params?.limit?.toString() || "20",
+      ...(params?.status && { status: params.status }),
+      ...(params?.server_id && { server_id: params.server_id }),
+      ...(params?.search && { search: params.search }),
+      ...(params?.sort_by && { sort_by: params.sort_by }),
+      ...(params?.sort_order && { sort_order: params.sort_order }),
+    };
+
+    const response = await api.jobs.getJobs(queryParams);
+    return {
+      jobs: response.jobs.map(convertGoJobToJob),
+      pagination: response.pagination,
+      filters: response.filters,
+    };
+  }, [params]);
 
   const {
-    data: jobs,
+    data: jobsData,
     loading,
     error,
     lastUpdated,
@@ -227,7 +278,14 @@ export function useRealJobs() {
     interval: 5000,
     enabled: true,
     immediate: true,
-    compareFunction: compareJobs,
+    compareFunction: (prev, next) => {
+      // Compare the jobs array and pagination info
+      if (!prev || !next) return false;
+      return (
+        compareJobs(prev.jobs, next.jobs) &&
+        JSON.stringify(prev.pagination) === JSON.stringify(next.pagination)
+      );
+    },
   });
 
   const executeJob = useCallback(
@@ -266,11 +324,20 @@ export function useRealJobs() {
     [forceRefresh]
   );
 
-  // Note: Go API doesn't have deleteJob endpoint, so we'll remove this function
-  // If you need to delete jobs, you'll need to add that endpoint to your Go API
-
   return {
-    jobs: jobs || [],
+    jobs: jobsData?.jobs || [],
+    pagination: jobsData?.pagination || {
+      page: 1,
+      limit: 20,
+      total: 0,
+      total_pages: 0,
+      has_next: false,
+      has_prev: false,
+    },
+    filters: jobsData?.filters || {
+      sort_by: "created_at",
+      sort_order: "desc",
+    },
     loading,
     error,
     lastUpdated,
@@ -279,7 +346,7 @@ export function useRealJobs() {
     stopPolling,
     executeJob,
     cancelJob,
-    // deleteJob removed as it's not available in Go API
+    forceRefresh,
   };
 }
 
@@ -302,7 +369,7 @@ export function useRealSystemStats() {
       const runningJobs = jobs.filter((j) => j.status === "running").length;
       const completedJobs = jobs.filter((j) => j.status === "completed").length;
       const failedJobs = jobs.filter((j) => j.status === "failed").length;
-      const totalJobs = jobs.length;
+      const totalJobs = jobsResponse.pagination.total; // Use actual total from pagination
 
       const connectionRate =
         totalServers > 0 ? (activeServers / totalServers) * 100 : 0;

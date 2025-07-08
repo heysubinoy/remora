@@ -7,7 +7,9 @@ import (
 	"job-executor/internal/models"
 	"job-executor/internal/queue"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -407,14 +409,31 @@ func (api *API) GetJobStderr(c *gin.Context) {
 func (api *API) ListJobs(c *gin.Context) {
 	var jobs []models.Job
 
-	// Get query parameters for pagination
+	// Get query parameters for pagination and filtering
 	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "10")
+	limit := c.DefaultQuery("limit", "20")
 	status := c.Query("status")
 	serverID := c.Query("server_id")
+	search := c.Query("search") // New search parameter
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
+
+	// Convert page and limit to integers
+	pageInt := 1
+	limitInt := 20
+	if p, err := strconv.Atoi(page); err == nil && p > 0 {
+		pageInt = p
+	}
+	if l, err := strconv.Atoi(limit); err == nil && l > 0 && l <= 100 {
+		limitInt = l
+	}
+
+	// Calculate offset
+	offset := (pageInt - 1) * limitInt
 
 	query := api.db.Model(&models.Job{}).Preload("Server")
 
+	// Apply filters
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -423,8 +442,45 @@ func (api *API) ListJobs(c *gin.Context) {
 		query = query.Where("server_id = ?", serverID)
 	}
 
-	// Simple pagination (in production, you'd want proper offset/limit handling)
-	if err := query.Order("created_at DESC").Limit(10).Find(&jobs).Error; err != nil {
+	// Apply search filter (search in command, args, and server name)
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where(
+			"command LIKE ? OR args LIKE ? OR EXISTS (SELECT 1 FROM servers WHERE servers.id = jobs.server_id AND servers.name LIKE ?)",
+			searchPattern, searchPattern, searchPattern,
+		)
+	}
+
+	// Get total count before applying pagination
+	var totalCount int64
+	if err := query.Count(&totalCount).Error; err != nil {
+		api.logger.Error("Failed to count jobs", slog.Any("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count jobs"})
+		return
+	}
+
+	// Apply sorting
+	validSortFields := map[string]bool{
+		"created_at":  true,
+		"updated_at":  true,
+		"started_at":  true,
+		"finished_at": true,
+		"status":      true,
+		"command":     true,
+	}
+	if !validSortFields[sortBy] {
+		sortBy = "created_at"
+	}
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc"
+	}
+
+	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
+	query = query.Order(orderClause)
+
+	// Apply pagination
+	if err := query.Offset(offset).Limit(limitInt).Find(&jobs).Error; err != nil {
+		api.logger.Error("Failed to fetch jobs", slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch jobs"})
 		return
 	}
@@ -436,10 +492,28 @@ func (api *API) ListJobs(c *gin.Context) {
 		responses = append(responses, response)
 	}
 
+	// Calculate pagination info
+	totalPages := int(math.Ceil(float64(totalCount) / float64(limitInt)))
+	hasNext := pageInt < totalPages
+	hasPrev := pageInt > 1
+
 	c.JSON(http.StatusOK, gin.H{
-		"jobs":  responses,
-		"page":  page,
-		"limit": limit,
+		"jobs": responses,
+		"pagination": gin.H{
+			"page":        pageInt,
+			"limit":       limitInt,
+			"total":       totalCount,
+			"total_pages": totalPages,
+			"has_next":    hasNext,
+			"has_prev":    hasPrev,
+		},
+		"filters": gin.H{
+			"status":     status,
+			"server_id":  serverID,
+			"search":     search,
+			"sort_by":    sortBy,
+			"sort_order": sortOrder,
+		},
 	})
 }
 

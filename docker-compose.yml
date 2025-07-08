@@ -102,21 +102,21 @@ services:
     restart: unless-stopped
 
   # Next.js Frontend
-  job-executor-frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: job-executor-frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - NODE_ENV=production
-    depends_on:
-      - job-executor-api
-    networks:
-      - job-executor-network
-    restart: unless-stopped
+  # job-executor-frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.frontend
+  #   container_name: job-executor-frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NEXT_PUBLIC_API_URL=http://localhost:8080
+  #     - NODE_ENV=production
+  #   depends_on:
+  #     - job-executor-api
+  #   networks:
+  #     - job-executor-network
+  #   restart: unless-stopped
 
   # Nginx Reverse Proxy (Optional - for production)
   nginx:

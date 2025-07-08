@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { useLiveDuration, formatDuration } from "@/hooks/use-live-duration";
 import type { Job } from "@/types";
 
 interface AnimatedJobRowProps {
@@ -26,6 +27,9 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
   onView,
   onCancel,
 }: AnimatedJobRowProps) {
+  // Use the live duration hook for running jobs
+  const liveDuration = useLiveDuration(job);
+
   const getStatusIcon = (status: Job["status"]) => {
     switch (status) {
       case "running":
@@ -35,6 +39,7 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
       case "failed":
         return <XCircle className="h-4 w-4 text-red-500" />;
       case "cancelled":
+      case "canceled":
         return <StopCircle className="h-4 w-4 text-gray-500" />;
     }
   };
@@ -59,6 +64,10 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
         variant: "secondary" as const,
         className: "transition-colors duration-200",
       },
+      canceled: {
+        variant: "secondary" as const,
+        className: "transition-colors duration-200",
+      },
     };
 
     const { variant, className } = config[status];
@@ -68,15 +77,6 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
         {status}
       </Badge>
     );
-  };
-
-  const formatDuration = (seconds: number) => {
-    if (seconds < 60) {
-      return `${seconds.toFixed(1)}s`;
-    }
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds.toFixed(1)}s`;
   };
 
   return (
@@ -112,10 +112,12 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
       <TableCell className="text-sm text-muted-foreground">
         <div className="flex flex-col">
           <span className="transition-colors duration-200">
-            {formatDistanceToNow(job.created, { addSuffix: true })}
+            {job.created
+              ? formatDistanceToNow(job.created, { addSuffix: true })
+              : "Unknown"}
           </span>
           <span className="text-xs opacity-70">
-            {job.created.toLocaleString()}
+            {job.created ? job.created.toLocaleString() : "N/A"}
           </span>
         </div>
       </TableCell>
@@ -124,12 +126,12 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
             <span className="text-blue-500 transition-colors duration-200">
-              {formatDuration(job.duration)}
+              {formatDuration(liveDuration)}
             </span>
           </div>
         ) : (
           <span className="transition-colors duration-200">
-            {formatDuration(job.duration)}
+            {formatDuration(liveDuration)}
           </span>
         )}
       </TableCell>
@@ -166,14 +168,6 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
               <StopCircle className="h-4 w-4" />
             </Button>
           )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="transition-all duration-200 hover:scale-105 hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
         </div>
       </TableCell>
     </TableRow>

@@ -32,7 +32,7 @@ import {
   useRealSystemStats,
 } from "@/hooks/use-real-api";
 import { toast } from "sonner";
-import type { ServerType } from "@/types";
+import type { Server as ServerType } from "@/types";
 import { ApiStatus } from "@/components/api-status";
 import { ConnectionIndicator } from "@/components/connection-indicator";
 import { DebugPanel } from "@/components/debug-panel";
@@ -40,6 +40,17 @@ import { ApiTestPanel } from "@/components/api-test-panel";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("execution");
+
+  // Job filtering and pagination state
+  const [jobFilters, setJobFilters] = useState({
+    page: 1,
+    limit: 20,
+    search: "",
+    status: "",
+    server_id: "",
+    sort_by: "created_at",
+    sort_order: "desc" as "asc" | "desc",
+  });
 
   // Use the real API hooks
   const {
@@ -55,13 +66,15 @@ export default function Dashboard() {
 
   const {
     jobs,
+    pagination,
+    filters,
     loading: jobsLoading,
     error: jobsError,
     isPolling: jobsPolling,
     executeJob,
     cancelJob,
-    // deleteJob,
-  } = useRealJobs();
+    forceRefresh: refreshJobs,
+  } = useRealJobs(jobFilters);
 
   const { stats, loading: statsLoading } = useRealSystemStats();
 
@@ -155,6 +168,8 @@ export default function Dashboard() {
     try {
       await executeJob(serverIds, command, timeout, args);
       toast.success("Jobs started successfully");
+      // Reset to first page to see new jobs
+      setJobFilters((prev) => ({ ...prev, page: 1 }));
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to execute jobs"
@@ -172,6 +187,23 @@ export default function Dashboard() {
         error instanceof Error ? error.message : "Failed to cancel job"
       );
     }
+  };
+
+  // Handle job filtering and pagination
+  const handleJobSearch = (search: string) => {
+    setJobFilters((prev) => ({ ...prev, search, page: 1 }));
+  };
+
+  const handleJobFilter = (key: string, value: string) => {
+    setJobFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
+  };
+
+  const handleJobPageChange = (page: number) => {
+    setJobFilters((prev) => ({ ...prev, page }));
+  };
+
+  const handleJobSort = (sort_by: string, sort_order: "asc" | "desc") => {
+    setJobFilters((prev) => ({ ...prev, sort_by, sort_order, page: 1 }));
   };
 
   // const handleDeleteJob = async (jobId: string) => {
@@ -387,11 +419,21 @@ export default function Dashboard() {
                 servers={servers}
                 onExecute={handleExecuteScript}
                 onTestConnection={handleTestConnection}
+                onJobsUpdate={refreshJobs}
               />
             </TabsContent>
 
             <TabsContent value="jobs" className="space-y-0">
-              <JobMonitoring jobs={jobs} onCancel={handleCancelJob} />
+              <JobMonitoring
+                jobs={jobs}
+                pagination={pagination}
+                filters={filters}
+                onCancel={handleCancelJob}
+                onSearch={handleJobSearch}
+                onFilter={handleJobFilter}
+                onPageChange={handleJobPageChange}
+                onSort={handleJobSort}
+              />
             </TabsContent>
 
             <TabsContent value="servers" className="space-y-0">

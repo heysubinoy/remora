@@ -217,9 +217,7 @@ export const goApi = {
     },
 
     // POST /api/v1/servers/:id/test
-    async testConnection(
-      id: string
-    ): Promise<{
+    async testConnection(id: string): Promise<{
       server_id: string;
       status: string;
       message?: string;
@@ -248,7 +246,27 @@ export const goApi = {
       limit?: string;
       status?: string;
       server_id?: string;
-    }): Promise<{ jobs: GoJob[]; page: string; limit: string }> {
+      search?: string;
+      sort_by?: string;
+      sort_order?: "asc" | "desc";
+    }): Promise<{
+      jobs: GoJob[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        total_pages: number;
+        has_next: boolean;
+        has_prev: boolean;
+      };
+      filters: {
+        status?: string;
+        server_id?: string;
+        search?: string;
+        sort_by: string;
+        sort_order: string;
+      };
+    }> {
       const url = buildApiUrlWithParams("/api/v1/jobs", params);
 
       const response = await fetch(url, {
