@@ -3,44 +3,69 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY web/package.json web/pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install
+# Copy package files first for better caching
+COPY web/package.json ./
+COPY web/package-lock.json* ./
 
-# Copy source code
-COPY web/ ./
+# Install dependencies with legacy peer deps to handle React 19 compatibility
+RUN npm install --legacy-peer-deps
 
-# Build the application
-RUN pnpm build
+# Copy source code (excluding node_modules)
+COPY web/app ./app
+COPY web/components ./components
+COPY web/hooks ./hooks
+COPY web/lib ./lib
+COPY web/public ./public
+COPY web/services ./services
+COPY web/styles ./styles
+COPY web/types ./types
+COPY web/next.config.mjs ./
+COPY web/tailwind.config.ts ./
+COPY web/postcss.config.mjs ./
+COPY web/tsconfig.json ./
+COPY web/next-env.d.ts ./
+COPY web/components.json ./
 
-# Production stage
+# Verify Next.js is installed and build
+RUN echo "Checking Next.js installation:" && \
+    ls -la node_modules/.bin/ && \
+    echo "Checking Next.js module:" && \
+    ls -la node_modules/next/ && \
+    echo "Checking Next.js binary:" && \
+    ls -la node_modules/next/dist/bin/ && \
+    echo "Attempting build:" && \
+    npm run build
+
+# Production stage  
 FROM node:18-alpine AS runner
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
-
 # Copy package files
-COPY web/package.json web/pnpm-lock.yaml ./
-RUN pnpm install --prod
+COPY web/package.json ./
 
-# Copy built application
+# Install only production dependencies with legacy peer deps
+RUN npm install --legacy-peer-deps --only=production
+
+# Copy built application from builder stage
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 
-# Create next user
+# Copy Next.js config files
+COPY --from=builder /app/next.config.mjs ./
+
+# Create nextjs user for security
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
-# Change ownership of .next directory
-RUN chown -R nextjs:nodejs .next
+# Change ownership of app directory
+RUN chown -R nextjs:nodejs /app
 
 USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
-ENV NODE_ENV production
+ENV PORT=3000
+ENV NODE_ENV=production
 
-CMD ["pnpm", "start"]
+CMD ["npm", "start"]

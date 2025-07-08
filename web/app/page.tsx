@@ -471,12 +471,21 @@ export default function Dashboard() {
           {/* Stats cards */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">System Overview</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                System Overview
+              </h2>
               {stats?.timestamp && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <div className={`h-2 w-2 rounded-full ${statsLoading ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></div>
+                  <div
+                    className={`h-2 w-2 rounded-full ${
+                      statsLoading
+                        ? "bg-blue-500 animate-pulse"
+                        : "bg-green-500"
+                    }`}
+                  ></div>
                   <span>
-                    Last updated: {new Date(stats.timestamp).toLocaleTimeString()}
+                    Last updated:{" "}
+                    {new Date(stats.timestamp).toLocaleTimeString()}
                   </span>
                 </div>
               )}

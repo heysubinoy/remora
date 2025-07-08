@@ -608,22 +608,26 @@ export const goApi = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
       }
 
       return response.json();
     },
 
     // Enhanced system info that includes server connection status
-    async getEnhancedSystemInfo(): Promise<SystemInfo & {
-      connected_servers: number;
-      disconnected_servers: number;
-    }> {
+    async getEnhancedSystemInfo(): Promise<
+      SystemInfo & {
+        connected_servers: number;
+        disconnected_servers: number;
+      }
+    > {
       try {
         // Get basic system info and server status in parallel
         const [systemInfo, serverStatus] = await Promise.all([
           this.getSystemInfo(),
-          goApi.servers.checkAllServersStatus(true) // Only check active servers
+          goApi.servers.checkAllServersStatus(true), // Only check active servers
         ]);
 
         return {

@@ -42,14 +42,17 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Node.js (for frontend builds only)
-web/src/node_modules/
-web/src/.next/
-web/src/out/
-web/src/.env.local
-web/src/.env.development.local
-web/src/.env.test.local
-web/src/.env.production.local
+# Node.js (for frontend builds)
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local
+web/.env.development.local
+web/.env.test.local
+web/.env.production.local
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
 
 # Go build artifacts
 bin/
