@@ -340,19 +340,27 @@ export function ScriptExecution({
     // Simple regex-based highlighting
     const patterns = [
       // Comments (highest priority)
-      { regex: /(#.*)$/, className: 'text-gray-400 italic' },
+      { regex: /(#.*)$/, className: "text-gray-400 italic" },
       // String literals
-      { regex: /(".*?"|'.*?')/, className: 'text-green-400' },
+      { regex: /(".*?"|'.*?')/, className: "text-green-400" },
       // Shell keywords
-      { regex: /\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|return|exit|break|continue|source|export|local|readonly|declare|set|unset)\b/, className: 'text-purple-400 font-semibold' },
+      {
+        regex:
+          /\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|return|exit|break|continue|source|export|local|readonly|declare|set|unset)\b/,
+        className: "text-purple-400 font-semibold",
+      },
       // Common commands
-      { regex: /\b(sudo|systemctl|docker|npm|yarn|git|curl|wget|ssh|scp|echo|cat|grep|sed|awk|sort|uniq|head|tail|find|ls|cd|mkdir|rm|cp|mv|chmod|chown)\b/, className: 'text-blue-400 font-semibold' },
+      {
+        regex:
+          /\b(sudo|systemctl|docker|npm|yarn|git|curl|wget|ssh|scp|echo|cat|grep|sed|awk|sort|uniq|head|tail|find|ls|cd|mkdir|rm|cp|mv|chmod|chown)\b/,
+        className: "text-blue-400 font-semibold",
+      },
       // Variables
-      { regex: /(\$\{?[a-zA-Z_][a-zA-Z0-9_]*\}?)/, className: 'text-cyan-400' },
+      { regex: /(\$\{?[a-zA-Z_][a-zA-Z0-9_]*\}?)/, className: "text-cyan-400" },
       // Numbers
-      { regex: /\b(\d+)\b/, className: 'text-yellow-400' },
+      { regex: /\b(\d+)\b/, className: "text-yellow-400" },
       // Operators
-      { regex: /([|&;(){}[\]])/, className: 'text-pink-400' },
+      { regex: /([|&;(){}[\]])/, className: "text-pink-400" },
     ];
 
     // Process each pattern
