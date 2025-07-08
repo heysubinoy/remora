@@ -11,6 +11,8 @@ import {
   Server,
   Clock,
   LogOut,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +48,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { AnimatedJobRow } from "@/components/animated-job-row";
+import { StreamingOutput } from "@/components/streaming-output";
 import { formatDuration } from "@/hooks/use-live-duration";
+import { useJobMonitoringStream } from "@/hooks/use-job-monitoring-stream";
 import type { Job } from "@/types";
 
 interface JobMonitoringProps {
@@ -73,10 +77,12 @@ interface JobMonitoringProps {
   onFilter?: (key: string, value: string) => void;
   onPageChange?: (page: number) => void;
   onSort?: (sort_by: string, sort_order: "asc" | "desc") => void;
+  onJobUpdate?: (job: Job) => void;
+  onJobComplete?: (job: Job) => void;
 }
 
 export function JobMonitoring({
-  jobs,
+  jobs: initialJobs,
   pagination,
   filters,
   onCancel,
@@ -86,6 +92,8 @@ export function JobMonitoring({
   onFilter,
   onPageChange,
   onSort,
+  onJobUpdate,
+  onJobComplete,
 }: JobMonitoringProps) {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [localSearchTerm, setLocalSearchTerm] = useState(filters?.search || "");
@@ -94,6 +102,19 @@ export function JobMonitoring({
   );
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Use the streaming hook for live updates
+  const {
+    jobs,
+    streamingJobs,
+    startJobStream,
+    stopJobStream,
+    updateJobs,
+  } = useJobMonitoringStream(
+    initialJobs,
+    onJobUpdate,
+    onJobComplete
+  );
 
   const handleSearchChange = (value: string) => {
     setLocalSearchTerm(value);
@@ -154,6 +175,16 @@ export function JobMonitoring({
     URL.revokeObjectURL(url);
   };
 
+  // Auto-update selected job when jobs change
+  useEffect(() => {
+    if (selectedJob) {
+      const updatedJob = jobs.find(job => job.id === selectedJob.id);
+      if (updatedJob) {
+        setSelectedJob(updatedJob);
+      }
+    }
+  }, [jobs, selectedJob]);
+
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
@@ -195,6 +226,17 @@ export function JobMonitoring({
                   <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
                   <span className="transition-colors duration-200">
                     {jobs.filter((j) => j.status === "running").length} running
+                  </span>
+                </div>
+                <span>•</span>
+                <div className="flex items-center gap-1">
+                  {streamingJobs.size > 0 ? (
+                    <Wifi className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <WifiOff className="h-3 w-3 text-muted-foreground" />
+                  )}
+                  <span className="transition-colors duration-200">
+                    {streamingJobs.size} streaming
                   </span>
                 </div>
                 <span>•</span>
@@ -276,6 +318,7 @@ export function JobMonitoring({
                       onCancel={onCancel}
                       onRerun={onRerun}
                       onDuplicate={onDuplicate}
+                      isStreaming={streamingJobs.has(job.id)}
                     />
                   ))
                 )}
@@ -477,73 +520,27 @@ export function JobMonitoring({
 
                     {/* Output Section */}
                     <div className="space-y-2">
-                      <span className="font-medium text-muted-foreground">
-                        Output
-                      </span>
-                      <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
-                        <ScrollArea className="h-full">
-                          <div className="p-4 space-y-2">
-                            {/* Standard Output */}
-                            {selectedJob.stdout && (
-                              <div>
-                                <div className="text-green-400 text-xs font-semibold mb-1">
-                                  STDOUT:
-                                </div>
-                                <pre className="text-green-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
-                                  {selectedJob.stdout}
-                                </pre>
-                              </div>
-                            )}
-
-                            {/* Standard Error */}
-                            {selectedJob.stderr && (
-                              <div>
-                                <div className="text-red-400 text-xs font-semibold mb-1">
-                                  STDERR:
-                                </div>
-                                <pre className="text-red-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
-                                  {selectedJob.stderr}
-                                </pre>
-                              </div>
-                            )}
-
-                            {/* Error Messages */}
-                            {selectedJob.error && (
-                              <div>
-                                <div className="text-orange-400 text-xs font-semibold mb-1">
-                                  ERROR:
-                                </div>
-                                <pre className="text-orange-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
-                                  {selectedJob.error}
-                                </pre>
-                              </div>
-                            )}
-
-                            {/* Fallback to general output */}
-                            {!selectedJob.stdout &&
-                              !selectedJob.stderr &&
-                              selectedJob.output && (
-                                <div>
-                                  <div className="text-gray-400 text-xs font-semibold mb-1">
-                                    OUTPUT:
-                                  </div>
-                                  <pre className="text-gray-300 text-sm whitespace-pre-wrap font-mono leading-relaxed">
-                                    {selectedJob.output}
-                                  </pre>
-                                </div>
-                              )}
-
-                            {/* No output available */}
-                            {!selectedJob.stdout &&
-                              !selectedJob.stderr &&
-                              !selectedJob.error &&
-                              !selectedJob.output && (
-                                <div className="text-gray-500 text-sm italic text-center py-8">
-                                  No output available
-                                </div>
-                              )}
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-muted-foreground">
+                          Output
+                        </span>
+                        {streamingJobs.has(selectedJob.id) && (
+                          <div className="flex items-center gap-1 text-xs text-green-500">
+                            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                            Live Updates
                           </div>
-                        </ScrollArea>
+                        )}
+                      </div>
+                      <div className="border rounded-lg overflow-hidden bg-black/90 h-[300px]">
+                        <StreamingOutput
+                          stdout={selectedJob.stdout}
+                          stderr={selectedJob.stderr}
+                          error={selectedJob.error}
+                          output={selectedJob.output}
+                          isStreaming={streamingJobs.has(selectedJob.id)}
+                          autoScroll={true}
+                          className="h-[300px]"
+                        />
                       </div>
                     </div>
                   </div>

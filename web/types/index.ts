@@ -26,7 +26,7 @@ export interface Job {
   command: string; // Combined command + args for display
   originalCommand?: string; // Original command without args (for duplication)
   args?: string;
-  status: "running" | "completed" | "failed" | "cancelled" | "canceled";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "canceled";
   created?: Date; // For frontend compatibility
   created_at: string; // Backend timestamp field
   updated_at?: string; // Backend timestamp field

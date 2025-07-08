@@ -11,6 +11,7 @@ import {
   Eye,
   RotateCcw,
   Copy,
+  Wifi,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -24,6 +25,7 @@ interface AnimatedJobRowProps {
   onCancel: (jobId: string) => void;
   onRerun?: (jobId: string) => void;
   onDuplicate?: (job: Job) => void;
+  isStreaming?: boolean;
 }
 
 export const AnimatedJobRow = memo(function AnimatedJobRow({
@@ -32,12 +34,15 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
   onCancel,
   onRerun,
   onDuplicate,
+  isStreaming = false,
 }: AnimatedJobRowProps) {
   // Use the live duration hook for running jobs
   const liveDuration = useLiveDuration(job);
 
   const getStatusIcon = (status: Job["status"]) => {
     switch (status) {
+      case "queued":
+        return <Clock className="h-4 w-4 text-yellow-500" />;
       case "running":
         return <Clock className="h-4 w-4 text-blue-500 animate-spin" />;
       case "completed":
@@ -52,6 +57,11 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
 
   const getStatusBadge = (status: Job["status"]) => {
     const config = {
+      queued: {
+        variant: "secondary" as const,
+        className:
+          "bg-yellow-500 hover:bg-yellow-600 transition-colors duration-200",
+      },
       running: {
         variant: "default" as const,
         className:
@@ -113,6 +123,12 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
             {getStatusIcon(job.status)}
           </div>
           {getStatusBadge(job.status)}
+          {isStreaming && (
+            <div className="flex items-center gap-1" title="Live updates">
+              <Wifi className="h-3 w-3 text-green-500" />
+              <div className="h-1 w-1 rounded-full bg-green-500 animate-pulse" />
+            </div>
+          )}
         </div>
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">

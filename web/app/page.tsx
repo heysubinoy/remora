@@ -615,6 +615,15 @@ export default function Dashboard() {
                 onFilter={handleJobFilter}
                 onPageChange={handleJobPageChange}
                 onSort={handleJobSort}
+                onJobUpdate={(updatedJob) => {
+                  // Optional: Handle individual job updates
+                  console.log("Job updated:", updatedJob);
+                }}
+                onJobComplete={(completedJob) => {
+                  // Refresh jobs list when a job completes
+                  console.log("Job completed:", completedJob);
+                  // The list will auto-refresh via polling, but we could trigger immediate refresh here if needed
+                }}
               />
             </TabsContent>
 
