@@ -2,13 +2,16 @@ package config
 
 import (
 	"os"
+	"runtime"
+	"strconv"
 )
 
 type Config struct {
-	ServerAddr  string
-	DatabaseURL string
-	RabbitMQURL string
-	SSH         SSHConfig
+	ServerAddr      string
+	DatabaseURL     string
+	RabbitMQURL     string
+	WorkerPoolSize  int
+	SSH             SSHConfig
 }
 
 type SSHConfig struct {
@@ -21,10 +24,31 @@ type SSHConfig struct {
 }
 
 func Load() *Config {
+	// Default worker pool size - goroutines are lightweight, especially for I/O-bound SSH tasks
+	// Use multiple workers per CPU core since most time is spent waiting for SSH responses
+	cpuCores := runtime.NumCPU()
+	defaultWorkerPoolSize := cpuCores * 4 // 4 workers per CPU core for I/O-bound tasks
+	
+	// Set reasonable bounds
+	if defaultWorkerPoolSize > 50 {
+		defaultWorkerPoolSize = 50 // Cap at 50 workers to avoid excessive resource usage
+	}
+	if defaultWorkerPoolSize < 4 {
+		defaultWorkerPoolSize = 4 // Minimum 4 workers even on single-core systems
+	}
+
+	workerPoolSize := defaultWorkerPoolSize
+	if poolSizeStr := os.Getenv("WORKER_POOL_SIZE"); poolSizeStr != "" {
+		if parsed, err := strconv.Atoi(poolSizeStr); err == nil && parsed > 0 {
+			workerPoolSize = parsed
+		}
+	}
+
 	return &Config{
-		ServerAddr:  getEnv("SERVER_ADDR", ":8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "./jobs.db"),
-		RabbitMQURL: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		ServerAddr:      getEnv("SERVER_ADDR", ":8080"),
+		DatabaseURL:     getEnv("DATABASE_URL", "./jobs.db"),
+		RabbitMQURL:     getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		WorkerPoolSize:  workerPoolSize,
 		SSH: SSHConfig{
 			Host:       getEnv("SSH_HOST", "localhost"),
 			Port:       getEnv("SSH_PORT", "22"),

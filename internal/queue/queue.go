@@ -219,8 +219,10 @@ func (q *RabbitMQQueue) StartConsumer(ctx context.Context, handler func(*models.
 		return fmt.Errorf("queue is closed")
 	}
 
-	// Set QoS to process one message at a time
-	if err := q.channel.Qos(1, 0, false); err != nil {
+	// Set QoS to allow multiple unacknowledged messages for concurrent processing
+	// Allow up to 50 unacknowledged messages per consumer to handle higher throughput
+	// This supports larger worker pools with multiple workers per CPU core
+	if err := q.channel.Qos(50, 0, false); err != nil {
 		return fmt.Errorf("failed to set QoS: %w", err)
 	}
 

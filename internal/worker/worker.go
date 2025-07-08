@@ -17,24 +17,65 @@ import (
 )
 
 type Worker struct {
-	db      *gorm.DB
-	queue   queue.Queue
-	storage storage.StorageService
-	running map[string]context.CancelFunc
-	mu      sync.RWMutex
+	db           *gorm.DB
+	queue        queue.Queue
+	storage      storage.StorageService
+	running      map[string]context.CancelFunc
+	mu           sync.RWMutex
+	jobChan      chan *models.Job
+	workerPool   int
+	activeJobs   int64        // Counter for active jobs
+	jobCountMu   sync.RWMutex // Mutex for job counter
 }
 
 func New(db *gorm.DB, queue queue.Queue, storage storage.StorageService) *Worker {
+	// Use a larger buffer to handle bursts of jobs
+	// Buffer size should accommodate multiple batches of concurrent jobs
+	bufferSize := 500 // Increased buffer for higher throughput
+	
 	return &Worker{
-		db:      db,
-		queue:   queue,
-		storage: storage,
-		running: make(map[string]context.CancelFunc),
+		db:         db,
+		queue:      queue,
+		storage:    storage,
+		running:    make(map[string]context.CancelFunc),
+		jobChan:    make(chan *models.Job, bufferSize), // Larger buffered channel
+		workerPool: 16, // Default higher pool size, will be overridden by config
 	}
 }
 
+// SetWorkerPoolSize configures the number of concurrent workers
+func (w *Worker) SetWorkerPoolSize(size int) {
+	if size < 1 {
+		size = 1
+	}
+	w.workerPool = size
+}
+
 func (w *Worker) Start(ctx context.Context) {
-	slog.Info("Starting job worker")
+	slog.Info("Starting job worker with thread pool", "worker_pool_size", w.workerPool)
+
+	// Start worker pool - multiple goroutines to process jobs concurrently
+	var wg sync.WaitGroup
+	for i := 0; i < w.workerPool; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			slog.Info("Starting worker goroutine", "worker_id", workerID)
+			
+			for {
+				select {
+				case <-ctx.Done():
+					slog.Info("Worker goroutine shutting down", "worker_id", workerID)
+					return
+				case job := <-w.jobChan:
+					if job != nil {
+						slog.Info("Worker processing job", "worker_id", workerID, "job_id", job.ID)
+						w.processJob(ctx, job)
+					}
+				}
+			}
+		}(i + 1)
+	}
 
 	// Start consuming jobs from RabbitMQ queue
 	slog.Info("Attempting to start queue consumer")
@@ -53,24 +94,87 @@ func (w *Worker) Start(ctx context.Context) {
 		slog.Info("Cancel consumer started successfully")
 	}
 
+	// Start periodic stats logging
+	statsTicker := time.NewTicker(30 * time.Second) // Log stats every 30 seconds
+	go func() {
+		defer statsTicker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-statsTicker.C:
+				w.LogWorkerStats()
+			}
+		}
+	}()
+
 	// Keep worker alive until context is cancelled
-	slog.Info("Worker fully started, waiting for jobs...")
+	slog.Info("Worker fully started with thread pool, waiting for jobs...", "worker_pool_size", w.workerPool)
 	<-ctx.Done()
-	slog.Info("Worker shutting down")
+	
+	slog.Info("Worker shutting down, closing job channel...")
+	close(w.jobChan)
+	
+	slog.Info("Waiting for worker goroutines to finish...")
+	wg.Wait()
+	
+	slog.Info("All worker goroutines finished")
 }
 
 func (w *Worker) processJobWrapper(job *models.Job) {
-	ctx := context.Background()
-	go w.processJob(ctx, job)
+	// Send job to worker pool via channel
+	select {
+	case w.jobChan <- job:
+		slog.Debug("Job queued for worker pool", "job_id", job.ID, "queue_size", len(w.jobChan))
+	default:
+		// Channel is full, log warning but still try to queue (will block)
+		slog.Warn("Worker pool queue is full, will wait for space", 
+			"job_id", job.ID, 
+			"queue_size", len(w.jobChan),
+			"queue_capacity", cap(w.jobChan))
+		
+		// Use a timeout to avoid blocking indefinitely
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		
+		select {
+		case w.jobChan <- job:
+			slog.Info("Job queued after waiting", "job_id", job.ID)
+		case <-ctx.Done():
+			// Timeout - reject the job
+			slog.Error("Job rejected due to worker pool timeout", "job_id", job.ID)
+			now := time.Now()
+			job.Status = models.StatusFailed
+			job.Error = "Worker pool overloaded - job timed out waiting for worker"
+			job.StartedAt = &now
+			job.FinishedAt = &now
+			w.updateJob(job)
+		}
+	}
 }
 
 func (w *Worker) processJob(ctx context.Context, job *models.Job) {
+	// Increment active job counter
+	w.jobCountMu.Lock()
+	w.activeJobs++
+	currentActive := w.activeJobs
+	w.jobCountMu.Unlock()
+	
+	defer func() {
+		// Decrement active job counter when done
+		w.jobCountMu.Lock()
+		w.activeJobs--
+		w.jobCountMu.Unlock()
+	}()
+
 	slog.Info("Processing job", 
 		"job_id", job.ID, 
 		"command", job.Command, 
 		"args", job.Args,
 		"server_id", job.ServerID,
-		"timeout", job.Timeout)
+		"timeout", job.Timeout,
+		"active_jobs", currentActive,
+		"queue_size", len(w.jobChan))
 
 	// Check if job was already canceled while in queue
 	// Refresh job status from database to get latest state
@@ -394,4 +498,30 @@ func (w *Worker) removeRunningJob(jobID string) {
 	w.mu.Lock()
 	delete(w.running, jobID)
 	w.mu.Unlock()
+}
+
+// GetWorkerStats returns current worker statistics
+func (w *Worker) GetWorkerStats() map[string]interface{} {
+	w.jobCountMu.RLock()
+	activeJobs := w.activeJobs
+	w.jobCountMu.RUnlock()
+	
+	return map[string]interface{}{
+		"worker_pool_size": w.workerPool,
+		"active_jobs":      activeJobs,
+		"queue_size":       len(w.jobChan),
+		"queue_capacity":   cap(w.jobChan),
+		"running_jobs":     len(w.running),
+	}
+}
+
+// LogWorkerStats logs current worker statistics
+func (w *Worker) LogWorkerStats() {
+	stats := w.GetWorkerStats()
+	slog.Info("Worker statistics", 
+		"worker_pool_size", stats["worker_pool_size"],
+		"active_jobs", stats["active_jobs"],
+		"queue_size", stats["queue_size"],
+		"queue_capacity", stats["queue_capacity"],
+		"running_jobs", stats["running_jobs"])
 }

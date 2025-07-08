@@ -105,6 +105,11 @@ func main() {
 
 	// Initialize worker
 	jobWorker := worker.New(db, jobQueue, storageService)
+	
+	// Configure worker pool size based on configuration
+	jobWorker.SetWorkerPoolSize(cfg.WorkerPoolSize)
+	
+	slog.Info("Worker configured", "worker_pool_size", cfg.WorkerPoolSize)
 
 	// Start worker in background
 	ctx, cancel := context.WithCancel(context.Background())
