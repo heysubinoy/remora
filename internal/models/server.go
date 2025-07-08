@@ -8,7 +8,7 @@ import (
 )
 
 type Server struct {
-	ID         string    `json:"id" gorm:"primaryKey"`
+	ID         string    `json:"id" gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`
 	Name       string    `json:"name" gorm:"not null;unique"`
 	Hostname   string    `json:"hostname" gorm:"not null"`
 	Port       int       `json:"port" gorm:"default:22"`

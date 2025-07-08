@@ -18,10 +18,10 @@ const (
 )
 
 type Job struct {
-	ID        string    `json:"id" gorm:"primaryKey"`
+	ID        string    `json:"id" gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`
 	Command   string    `json:"command" gorm:"not null"`
 	Args      string    `json:"args"`
-	ServerID  string    `json:"server_id"`
+	ServerID  string    `json:"server_id" gorm:"type:uuid"`
 	Status    JobStatus `json:"status" gorm:"default:queued"`
 	Output    string    `json:"output" gorm:"type:text"`    // stdout - using TEXT for large outputs
 	Error     string    `json:"error" gorm:"type:text"`     // stderr - using TEXT for large outputs
@@ -36,7 +36,7 @@ type Job struct {
 	FinishedAt *time.Time `json:"finished_at"`
 	
 	// Relations
-	Server    *Server `json:"server,omitempty" gorm:"foreignKey:ServerID"`
+	Server    *Server `json:"server,omitempty" gorm:"foreignKey:ServerID;constraint:OnDelete:RESTRICT"`
 }
 
 func (j *Job) BeforeCreate(tx *gorm.DB) error {

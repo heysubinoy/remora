@@ -31,8 +31,12 @@ func Initialize(databaseURL string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// Auto-migrate the schema
-	if err := db.AutoMigrate(&models.Job{}, &models.Server{}); err != nil {
+	// Auto-migrate the schema in correct order (referenced tables first)
+	if err := db.AutoMigrate(&models.Server{}); err != nil {
+		return nil, err
+	}
+	
+	if err := db.AutoMigrate(&models.Job{}); err != nil {
 		return nil, err
 	}
 
