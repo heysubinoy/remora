@@ -200,8 +200,8 @@ export function useRealServers() {
   );
 
   const deleteServer = useCallback(
-    async (id: string) => {
-      const response = await api.servers.deleteServer(id);
+    async (id: string, force: boolean = false) => {
+      const response = await api.servers.deleteServer(id, force);
       // Force refresh to remove deleted server
       await forceRefresh();
       return response;

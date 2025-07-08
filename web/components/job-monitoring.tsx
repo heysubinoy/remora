@@ -407,8 +407,8 @@ export function JobMonitoring({
                     Timeout
                   </span>
                   <p className="font-mono">
-                    {selectedJob.timeout 
-                      ? `${selectedJob.timeout}s` 
+                    {selectedJob.timeout
+                      ? `${selectedJob.timeout}s`
                       : "No timeout"}
                   </p>
                 </div>

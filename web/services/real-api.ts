@@ -208,9 +208,13 @@ export const goApi = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
+        const errorMessage = errorData.error || `HTTP error! status: ${response.status}`;
+        
+        // Include additional details if available
+        const details = errorData.details ? ` ${errorData.details}` : '';
+        const fullError = `${errorMessage}${details}`;
+        
+        throw new Error(fullError);
       }
 
       return response.json();

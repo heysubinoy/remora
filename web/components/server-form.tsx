@@ -1,20 +1,26 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileUploadZone } from "@/components/file-upload-zone"
-import { Badge } from "@/components/ui/badge"
-import { Eye, EyeOff, Key, Lock, Upload, FileText } from "lucide-react"
-import type { Server } from "@/types"
+import type React from "react";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { FileUploadZone } from "@/components/file-upload-zone";
+import { Badge } from "@/components/ui/badge";
+import { Eye, EyeOff, Key, Lock, Upload, FileText } from "lucide-react";
+import type { Server } from "@/types";
 
 interface ServerFormProps {
-  initialData?: Server
-  onSubmit: (data: Omit<Server, "id">) => void
+  initialData?: Server;
+  onSubmit: (data: Omit<Server, "id">) => void;
 }
 
 export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
@@ -27,84 +33,122 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
     sshKeyPath: initialData?.sshKeyPath || "",
     privateKeyContent: initialData?.privateKeyContent || "",
     password: "", // New field for password auth
+    pem_file_url: initialData?.pem_file_url || "", // Add PEM file URL field
     status: initialData?.status || ("disconnected" as const),
-  })
+  });
 
-  const [authMethod, setAuthMethod] = useState<"file" | "content" | "password">("file")
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [showPassword, setShowPassword] = useState(false)
-  const [keyFileContent, setKeyFileContent] = useState("")
+  const [authMethod, setAuthMethod] = useState<"file" | "content" | "password">(
+    "file"
+  );
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [keyFileContent, setKeyFileContent] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedPemUrl, setUploadedPemUrl] = useState("");
 
   // Update auth method based on initial data
   useEffect(() => {
     if (initialData) {
       if (initialData.sshKeyPath) {
-        setAuthMethod("file")
+        setAuthMethod("file");
       } else if (initialData.privateKeyContent) {
-        setAuthMethod("content")
-        setKeyFileContent(initialData.privateKeyContent)
+        setAuthMethod("content");
+        setKeyFileContent(initialData.privateKeyContent);
       }
     }
-  }, [initialData])
+  }, [initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    const finalData = { ...formData }
+    const finalData = { ...formData };
 
     // Set auth data based on selected method
     if (authMethod === "password") {
-      finalData.authType = "password" as any // Extend the type
-      finalData.sshKeyPath = ""
-      finalData.privateKeyContent = ""
+      finalData.authType = "password" as any; // Extend the type
+      finalData.sshKeyPath = "";
+      finalData.privateKeyContent = "";
     } else if (authMethod === "file") {
-      finalData.authType = "ssh-key"
-      finalData.privateKeyContent = ""
-      // sshKeyPath is already set from file selection or input
+      finalData.authType = "ssh-key";
+      finalData.privateKeyContent = "";
+      // Use uploaded PEM URL if available, otherwise use sshKeyPath
+      if (uploadedPemUrl) {
+        finalData.pem_file_url = uploadedPemUrl;
+        finalData.sshKeyPath = ""; // Clear local path since we're using uploaded file
+      }
     } else if (authMethod === "content") {
-      finalData.authType = "private-key"
-      finalData.sshKeyPath = ""
-      finalData.privateKeyContent = keyFileContent
+      finalData.authType = "private-key";
+      finalData.sshKeyPath = "";
+      finalData.privateKeyContent = keyFileContent;
     }
 
-    onSubmit(finalData)
-  }
+    onSubmit(finalData);
+  };
 
   const handleInputChange = (field: string, value: string | number) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
-  const handleFileSelect = (file: File) => {
-    setSelectedFile(file)
-    handleInputChange("sshKeyPath", file.name) // Store filename for display
-
-    // Read file content for preview
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const content = e.target?.result as string
-      setKeyFileContent(content)
+  const handleFileSelect = async (file: File) => {
+    setSelectedFile(file);
+    setIsUploading(true);
+    
+    try {
+      // Upload file to backend
+      const formData = new FormData();
+      formData.append('pem_file', file);
+      
+      const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8080';
+      const response = await fetch(`${serverUrl}/api/v1/pem-files/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload PEM file');
+      }
+      
+      const result = await response.json();
+      setUploadedPemUrl(result.pem_file_url);
+      handleInputChange("sshKeyPath", file.name); // Store filename for display
+      
+      // Read file content for preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        setKeyFileContent(content);
+      };
+      reader.readAsText(file);
+      
+    } catch (error) {
+      console.error('Upload failed:', error);
+      // Handle upload error - could show a toast notification here
+      alert('Failed to upload PEM file. Please try again.');
+      setSelectedFile(null);
+    } finally {
+      setIsUploading(false);
     }
-    reader.readAsText(file)
-  }
+  };
 
   const handleFileRemove = () => {
-    setSelectedFile(null)
-    setKeyFileContent("")
-    handleInputChange("sshKeyPath", "")
-  }
+    setSelectedFile(null);
+    setKeyFileContent("");
+    setUploadedPemUrl("");
+    handleInputChange("sshKeyPath", "");
+  };
 
   const getAuthMethodIcon = (method: string) => {
     switch (method) {
       case "file":
-        return <Upload className="h-4 w-4" />
+        return <Upload className="h-4 w-4" />;
       case "content":
-        return <FileText className="h-4 w-4" />
+        return <FileText className="h-4 w-4" />;
       case "password":
-        return <Lock className="h-4 w-4" />
+        return <Lock className="h-4 w-4" />;
       default:
-        return <Key className="h-4 w-4" />
+        return <Key className="h-4 w-4" />;
     }
-  }
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -117,7 +161,9 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
             </div>
             Server Details
           </CardTitle>
-          <CardDescription>Configure the basic connection details for your server</CardDescription>
+          <CardDescription>
+            Configure the basic connection details for your server
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -152,7 +198,9 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
                 id="port"
                 type="number"
                 value={formData.port}
-                onChange={(e) => handleInputChange("port", Number.parseInt(e.target.value))}
+                onChange={(e) =>
+                  handleInputChange("port", Number.parseInt(e.target.value))
+                }
                 placeholder="22"
                 min="1"
                 max="65535"
@@ -184,17 +232,33 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
             </div>
             Authentication
           </CardTitle>
-          <CardDescription>Choose how to authenticate with your server</CardDescription>
+          <CardDescription>
+            Choose how to authenticate with your server
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Authentication Method Selection */}
           <div className="space-y-3">
-            <Label className="text-base font-medium">Authentication Method</Label>
+            <Label className="text-base font-medium">
+              Authentication Method
+            </Label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {[
-                { value: "file", label: "SSH Key File", desc: "Upload .pem or .key file" },
-                { value: "content", label: "Private Key", desc: "Paste key content" },
-                { value: "password", label: "Password", desc: "Username & password" },
+                {
+                  value: "file",
+                  label: "SSH Key File",
+                  desc: "Upload .pem or .key file",
+                },
+                {
+                  value: "content",
+                  label: "Private Key",
+                  desc: "Paste key content",
+                },
+                {
+                  value: "password",
+                  label: "Password",
+                  desc: "Username & password",
+                },
               ].map((method) => (
                 <button
                   key={method.value}
@@ -207,19 +271,22 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`rounded-lg p-2 ${authMethod === method.value ? "bg-primary/10" : "bg-muted/50"}`}>
+                    <div
+                      className={`rounded-lg p-2 ${
+                        authMethod === method.value
+                          ? "bg-primary/10"
+                          : "bg-muted/50"
+                      }`}
+                    >
                       {getAuthMethodIcon(method.value)}
                     </div>
                     <div>
                       <div className="font-medium text-sm">{method.label}</div>
-                      <div className="text-xs text-muted-foreground">{method.desc}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {method.desc}
+                      </div>
                     </div>
                   </div>
-                  {authMethod === method.value && (
-                    <Badge variant="default" className="mt-2 text-xs">
-                      Selected
-                    </Badge>
-                  )}
                 </button>
               ))}
             </div>
@@ -238,15 +305,33 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
                     accept=".pem,.key,.ppk,.pub"
                     maxSize={5}
                   />
+                  {isUploading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                      Uploading PEM file...
+                    </div>
+                  )}
+                  {uploadedPemUrl && !isUploading && (
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <div className="h-4 w-4 rounded-full bg-green-500 flex items-center justify-center">
+                        <div className="h-2 w-2 rounded-full bg-white"></div>
+                      </div>
+                      File uploaded successfully
+                    </div>
+                  )}
                 </div>
 
                 {/* Alternative: Manual path input */}
                 <div className="space-y-2">
-                  <Label htmlFor="sshKeyPath">Or enter file path manually</Label>
+                  <Label htmlFor="sshKeyPath">
+                    Or enter file path manually
+                  </Label>
                   <Input
                     id="sshKeyPath"
                     value={formData.sshKeyPath}
-                    onChange={(e) => handleInputChange("sshKeyPath", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("sshKeyPath", e.target.value)
+                    }
                     placeholder="/home/user/.ssh/id_rsa or /path/to/key.pem"
                     className="transition-all duration-200 focus:scale-105"
                   />
@@ -280,7 +365,8 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
                   className="font-mono text-sm transition-all duration-200 focus:scale-105"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Paste your complete private key including the BEGIN and END lines
+                  Paste your complete private key including the BEGIN and END
+                  lines
                 </p>
               </div>
             )}
@@ -294,7 +380,9 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       value={formData.password}
-                      onChange={(e) => handleInputChange("password", e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("password", e.target.value)
+                      }
                       placeholder="Enter server password"
                       required
                       className="pr-10 transition-all duration-200 focus:scale-105"
@@ -306,7 +394,11 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
                       className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                       onClick={() => setShowPassword(!showPassword)}
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -315,10 +407,13 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
                   <div className="flex items-start gap-2">
                     <Lock className="h-4 w-4 text-yellow-600 mt-0.5" />
                     <div className="text-sm">
-                      <p className="font-medium text-yellow-800 dark:text-yellow-200">Security Note</p>
+                      <p className="font-medium text-yellow-800 dark:text-yellow-200">
+                        Security Note
+                      </p>
                       <p className="text-yellow-700 dark:text-yellow-300 text-xs mt-1">
-                        SSH key authentication is more secure than password authentication. Consider using SSH keys for
-                        production servers.
+                        SSH key authentication is more secure than password
+                        authentication. Consider using SSH keys for production
+                        servers.
                       </p>
                     </div>
                   </div>
@@ -340,5 +435,5 @@ export function ServerForm({ initialData, onSubmit }: ServerFormProps) {
         </Button>
       </div>
     </form>
-  )
+  );
 }

@@ -135,10 +135,14 @@ export default function Dashboard() {
     }
   };
 
-  const handleDeleteServer = async (id: string) => {
+  const handleDeleteServer = async (id: string, force: boolean = false) => {
     try {
-      await deleteServer(id);
-      toast.success("Server deleted successfully");
+      const result = await deleteServer(id, force);
+      if (result.deleted_jobs > 0) {
+        toast.success(`Server deleted successfully. ${result.deleted_jobs} associated job(s) were also removed.`);
+      } else {
+        toast.success("Server deleted successfully");
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete server"
