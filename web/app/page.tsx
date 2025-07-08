@@ -419,7 +419,7 @@ export default function Dashboard() {
                   lastUpdated={servers.length > 0 ? new Date() : null}
                   error={serversError}
                 />
-                <div className="flex items-center gap-2 transition-all duration-300">
+                {/* <div className="flex items-center gap-2 transition-all duration-300">
                   <span className="text-muted-foreground transition-colors duration-200">
                     {connectedServers}/{totalServers} servers online
                   </span>
@@ -436,7 +436,7 @@ export default function Dashboard() {
                       {queuedJobs} queued
                     </span>
                   )}
-                </div>
+                </div> */}
                 <ApiStatus />
               </div>
 
@@ -456,7 +456,6 @@ export default function Dashboard() {
                     <div>⌘+1 - Script Execution</div>
                     <div>⌘+2 - Job Monitoring</div>
                     <div>⌘+3 - Server Management</div>
-                    <div>⌘+4 - API Testing</div>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -543,7 +542,7 @@ export default function Dashboard() {
             className="space-y-6"
           >
             <div className="flex items-center justify-between">
-              <TabsList className="grid w-full max-w-lg grid-cols-4 bg-muted/50 border border-border transition-all duration-300">
+              <TabsList className="grid w-full max-w-lg grid-cols-3 bg-muted/50 border border-border transition-all duration-300">
                 <TabsTrigger
                   value="execution"
                   className="flex items-center gap-2 transition-all duration-200"
@@ -565,13 +564,13 @@ export default function Dashboard() {
                   <Server className="h-4 w-4" />
                   <span className="hidden sm:inline">Servers</span>
                 </TabsTrigger>
-                <TabsTrigger
+                {/* <TabsTrigger
                   value="api"
                   className="flex items-center gap-2 transition-all duration-200"
                 >
                   <Database className="h-4 w-4" />
                   <span className="hidden sm:inline">API</span>
-                </TabsTrigger>
+                </TabsTrigger> */}
               </TabsList>
 
               <div className="flex items-center gap-2">
@@ -581,13 +580,20 @@ export default function Dashboard() {
                 >
                   API v1.0
                 </Badge>
-                <Button
-                  variant="ghost"
-                  size="icon"
+                <a
+                  href="https://github.com/heysubinoy/remora"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="h-9 w-9 transition-all duration-200 hover:scale-110"
                 >
-                  <Github className="h-4 w-4" />
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 transition-all duration-200"
+                  >
+                    <Github className="h-4 w-4" />
+                  </Button>
+                </a>
               </div>
             </div>
 
@@ -643,14 +649,14 @@ export default function Dashboard() {
             </TabsContent>
           </Tabs>
         </main>
-        <DebugPanel
+        {/* <DebugPanel
           servers={servers}
           jobs={jobs}
           stats={stats}
           serversError={serversError}
           jobsError={jobsError}
           isPolling={serversPolling || jobsPolling}
-        />
+        /> */}
       </div>
     </TooltipProvider>
   );
