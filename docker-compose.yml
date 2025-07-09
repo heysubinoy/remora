@@ -60,9 +60,9 @@ services:
       - DATABASE_URL=postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable
       - SERVER_ADDR=:8080
       - PEM_UPLOAD_DIR=/app/pem-files
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=your-access-key-id
+      - AWS_SECRET_ACCESS_KEY=your-secret-access-key
+      - AWS_DEFAULT_REGION=us-east-1
     volumes:
       - ./data:/app/data
       - ./pem-files:/app/pem-files
@@ -85,9 +85,9 @@ services:
       - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
       - DATABASE_URL=postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable
       - PEM_FILES_DIR=/app/pem-files
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=your-access-key-id
+      - AWS_SECRET_ACCESS_KEY=your-secret-access-key
+      - AWS_DEFAULT_REGION=us-east-1
       - LOG_LEVEL=debug
       - WORKER_CONCURRENCY=10
       - ENV=production
