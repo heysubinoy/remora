@@ -22,29 +22,16 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # RabbitMQ Message Queue
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: job-executor-rabbitmq
-    hostname: job-executor-rabbitmq
+  # NetQueue Custom Queue Service
+  netqueue:
+    build:
+      context: .
+      dockerfile: Dockerfile.queue
+    container_name: job-executor-netqueue
     ports:
-      - "5672:5672" # AMQP port
-      - "15672:15672" # Management UI port
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: password123
-      RABBITMQ_DEFAULT_VHOST: job-executor
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-      - ./deployment/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - "9000:9000"
     networks:
       - job-executor-network
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
     restart: unless-stopped
 
   # Job Executor API Service
@@ -56,7 +43,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
+      - NETQUEUE_ADDR=netqueue:9000
       - DATABASE_URL=postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable
       - SERVER_ADDR=:8080
       - PEM_UPLOAD_DIR=/app/pem-files
@@ -69,8 +56,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      netqueue:
+        condition: service_started
     networks:
       - job-executor-network
     restart: unless-stopped
@@ -82,7 +69,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: job-executor-worker
     environment:
-      - RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
+      - NETQUEUE_ADDR=netqueue:9000
       - DATABASE_URL=postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable
       - PEM_FILES_DIR=/app/pem-files
       - AWS_ACCESS_KEY_ID=your-access-key-id
@@ -97,8 +84,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      netqueue:
+        condition: service_started
     networks:
       - job-executor-network
     restart: unless-stopped
@@ -110,45 +97,43 @@ services:
       start_period: 40s
 
   # Next.js Frontend
-  job-executor-frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: job-executor-frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - NODE_ENV=production
-    depends_on:
-      - job-executor-api
-    networks:
-      - job-executor-network
-    restart: unless-stopped
+  # job-executor-frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.frontend
+  #   container_name: job-executor-frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NEXT_PUBLIC_API_URL=http://localhost:8080
+  #     - NODE_ENV=production
+  #   depends_on:
+  #     - job-executor-api
+  #   networks:
+  #     - job-executor-network
+  #   restart: unless-stopped
 
   # Nginx Reverse Proxy (Optional - for production)
-  nginx:
-    image: nginx:alpine
-    container_name: job-executor-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./deployment/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - job-executor-api
-      - job-executor-frontend
-    networks:
-      - job-executor-network
-    restart: unless-stopped
-    profiles:
-      - production
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: job-executor-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./deployment/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - job-executor-api
+  #     - job-executor-frontend
+  #   networks:
+  #     - job-executor-network
+  #   restart: unless-stopped
+  #   profiles:
+  #     - production
 
 volumes:
   postgres_data:
-    driver: local
-  rabbitmq_data:
     driver: local
 
 networks:

@@ -14,6 +14,7 @@ import (
 	"job-executor/internal/queue"
 	"job-executor/internal/storage"
 	"job-executor/internal/worker"
+
 	"gorm.io/gorm"
 )
 
@@ -97,49 +98,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize job queue (RabbitMQ) - for consuming jobs
-	var jobQueue queue.Queue
 
-	// Try to connect to RabbitMQ with retries
-	maxRetries := 10
-	retryDelay := 5 * time.Second
-
-	slog.Info("Attempting to connect to RabbitMQ", "url", cfg.RabbitMQURL, "max_retries", maxRetries)
-
-	var rabbitQueue *queue.RabbitMQQueue
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		slog.Info("RabbitMQ connection attempt", "attempt", attempt, "max_retries", maxRetries)
-
-		var connErr error
-		rabbitQueue, connErr = queue.NewRabbitMQQueue(cfg.RabbitMQURL)
-		if connErr == nil {
-			slog.Info("Connected to RabbitMQ successfully", "url", cfg.RabbitMQURL, "attempt", attempt)
-			jobQueue = rabbitQueue
-			break
-		}
-
-		slog.Warn("Failed to connect to RabbitMQ", "error", connErr, "attempt", attempt, "max_retries", maxRetries)
-
-		if attempt < maxRetries {
-			slog.Info("Retrying RabbitMQ connection", "retry_delay", retryDelay, "next_attempt", attempt+1)
-			time.Sleep(retryDelay)
-		}
-	}
-
-	if jobQueue == nil {
-		slog.Error("Failed to connect to RabbitMQ after all retries", "max_retries", maxRetries)
-		slog.Error("Worker requires RabbitMQ to function properly")
-		os.Exit(1)
-	}
-
-	// Ensure graceful cleanup of RabbitMQ connection
-	defer func() {
-		if rabbitQueue != nil {
-			if closeErr := rabbitQueue.Close(); closeErr != nil {
-				slog.Error("Failed to close RabbitMQ connection", "error", closeErr)
-			}
-		}
-	}()
+	   // Initialize job queue (NetQueue polyfill)
+	   netqueueAddr := getEnvOrDefault("NETQUEUE_ADDR", "localhost:9000")
+	   jobQueue, err := queue.NewNetQueue(netqueueAddr)
+	   if err != nil {
+			   slog.Error("Failed to connect to NetQueue server", "error", err, "addr", netqueueAddr)
+			   os.Exit(1)
+	   }
+	   defer func() {
+			   if jobQueue != nil {
+					   if closeErr := jobQueue.Close(); closeErr != nil {
+							   slog.Error("Failed to close NetQueue connection", "error", closeErr)
+					   }
+			   }
+	   }()
 
 	// Initialize storage service
 	storageConfig := &storage.StorageConfig{
@@ -162,7 +135,7 @@ func main() {
 	}
 
 	// Initialize worker
-	jobWorker := worker.New(db, jobQueue, storageService)
+	   jobWorker := worker.New(db, *jobQueue, storageService)
 
 	// Configure worker pool size based on configuration
 	jobWorker.SetWorkerPoolSize(cfg.WorkerPoolSize)

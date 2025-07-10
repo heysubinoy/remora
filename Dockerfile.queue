@@ -1,0 +1,12 @@
+# Build NetQueue server
+FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN cd cmd/queue && go build -o /app/netqueue-server
+
+# Minimal runtime image
+FROM alpine:3.19
+WORKDIR /app
+COPY --from=builder /app/netqueue-server /app/netqueue-server
+EXPOSE 9000
+ENTRYPOINT ["/app/netqueue-server"]

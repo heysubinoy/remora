@@ -18,7 +18,7 @@ import (
 
 type Worker struct {
 	db           *gorm.DB
-	queue        queue.Queue
+	queue        queue.NetQueue
 	storage      storage.StorageService
 	running      map[string]context.CancelFunc
 	mu           sync.RWMutex
@@ -28,7 +28,7 @@ type Worker struct {
 	jobCountMu   sync.RWMutex // Mutex for job counter
 }
 
-func New(db *gorm.DB, queue queue.Queue, storage storage.StorageService) *Worker {
+func New(db *gorm.DB, queue queue.NetQueue, storage storage.StorageService) *Worker {
 	// Use a larger buffer to handle bursts of jobs
 	// Buffer size should accommodate multiple batches of concurrent jobs
 	bufferSize := 500 // Increased buffer for higher throughput

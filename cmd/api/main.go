@@ -43,46 +43,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize job queue (RabbitMQ) - for publishing jobs only
-	var jobQueue queue.Queue
-	
-	// Try to connect to RabbitMQ with retries, fallback to in-memory queue if unavailable
-	maxRetries := 5
-	retryDelay := 3 * time.Second
-	
-	slog.Info("Attempting to connect to RabbitMQ", "url", cfg.RabbitMQURL, "max_retries", maxRetries)
-	
-	var rabbitQueue *queue.RabbitMQQueue
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		slog.Info("RabbitMQ connection attempt", "attempt", attempt, "max_retries", maxRetries)
-		
-		var connErr error
-		rabbitQueue, connErr = queue.NewRabbitMQQueue(cfg.RabbitMQURL)
-		if connErr == nil {
-			slog.Info("Connected to RabbitMQ successfully", "url", cfg.RabbitMQURL, "attempt", attempt)
-			jobQueue = rabbitQueue
-			break
-		}
-		
-		slog.Warn("Failed to connect to RabbitMQ", "error", connErr, "attempt", attempt, "max_retries", maxRetries)
-		
-		if attempt < maxRetries {
-			slog.Info("Retrying RabbitMQ connection", "retry_delay", retryDelay, "next_attempt", attempt+1)
-			time.Sleep(retryDelay)
-		}
-	}
-	
-	if jobQueue == nil {
-		slog.Warn("Failed to connect to RabbitMQ after all retries, using in-memory queue", "url", cfg.RabbitMQURL)
-		jobQueue = queue.NewInMemoryQueue()
-	} else {
-		// Ensure graceful cleanup of RabbitMQ connection
-		defer func() {
-			if closeErr := rabbitQueue.Close(); closeErr != nil {
-				slog.Error("Failed to close RabbitMQ connection", "error", closeErr)
-			}
-		}()
-	}
+// Initialize job queue (NetQueue polyfill)
+var jobQueue *queue.NetQueue
+netqueueAddr := getEnvOrDefault("NETQUEUE_ADDR", "localhost:9000")
+q, err := queue.NewNetQueue(netqueueAddr)
+if err != nil {
+	   slog.Error("Failed to connect to NetQueue server", "error", err, "addr", netqueueAddr)
+	   os.Exit(1)
+}
+jobQueue = q
+defer func() {
+	   if jobQueue != nil {
+			   if closeErr := jobQueue.Close(); closeErr != nil {
+					   slog.Error("Failed to close NetQueue connection", "error", closeErr)
+			   }
+	   }
+}()
 
 	// Initialize storage service
 	storageConfig := &storage.StorageConfig{
@@ -132,7 +108,7 @@ func main() {
 	router.Use(cors.New(corsConfig))
 
 	// Setup API routes - no worker dependency
-	api.SetupAPIRoutes(router, db, jobQueue, storageService, logger)
+	   api.SetupAPIRoutes(router, db, *jobQueue, storageService, logger)
 
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,

@@ -5,7 +5,7 @@
 # Author: GitHub Copilot
 # Date: 2025-07-08
 
-BASE_URL="https://remora.sbn.lol/api/v1"
+BASE_URL="http://localhost:8080/api/v1"
 
 # Colors for output
 RED='\033[0;31m'
@@ -79,9 +79,9 @@ CREATE_RESPONSE_1=$(curl -s -X POST "$BASE_URL/servers" \
   -H "Content-Type: application/json" \
   -d "{
     \"name\": \"$SERVER_NAME_1\",
-    \"hostname\": \"20.193.249.175\",
+    \"hostname\": \"20.193.138.153\",
     \"port\": 22,
-    \"user\": \"billa\",
+    \"user\": \"testvm\",
     \"auth_type\": \"key\",
     \"pem_file_url\": \"$PEM_URL\",
     \"is_active\": true

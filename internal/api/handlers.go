@@ -13,20 +13,20 @@ import (
 
 type API struct {
 	db      *gorm.DB
-	queue   queue.Queue
+	queue   queue.NetQueue
 	worker  *worker.Worker
 	storage storage.StorageService
 	logger  *slog.Logger
 }
 
 // SetupRoutes is the legacy setup function that includes worker dependency
-func SetupRoutes(router *gin.Engine, db *gorm.DB, queue queue.Queue, worker *worker.Worker, storage storage.StorageService, logger *slog.Logger) {
+func SetupRoutes(router *gin.Engine, db *gorm.DB, queue queue.NetQueue, worker *worker.Worker, storage storage.StorageService, logger *slog.Logger) {
 	api := &API{db: db, queue: queue, worker: worker, storage: storage, logger: logger}
 	setupCommonRoutes(router, api)
 }
 
 // SetupAPIRoutes is the new setup function without worker dependency (for API server)
-func SetupAPIRoutes(router *gin.Engine, db *gorm.DB, queue queue.Queue, storage storage.StorageService, logger *slog.Logger) {
+func SetupAPIRoutes(router *gin.Engine, db *gorm.DB, queue queue.NetQueue, storage storage.StorageService, logger *slog.Logger) {
 	api := &API{db: db, queue: queue, worker: nil, storage: storage, logger: logger}
 	setupCommonRoutes(router, api)
 }
@@ -75,13 +75,5 @@ func setupCommonRoutes(router *gin.Engine, api *API) {
 		c.File("./web/index.html")
 	})
 
-	// Debug routes (for troubleshooting)
-	debug := router.Group("/debug")
-	{
-		debug.GET("/health", api.DebugHealth)
-		debug.GET("/queue", api.DebugQueue)
-		debug.GET("/workers", api.DebugWorkers)
-		debug.GET("/env", api.DebugEnvironment)
-		debug.GET("/connections", api.DebugConnections)
-	}
+	
 }
