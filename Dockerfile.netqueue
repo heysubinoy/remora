@@ -1,0 +1,12 @@
+# Dockerfile for NetQueue server
+FROM golang:1.23-alpine as builder
+WORKDIR /app
+COPY . .
+RUN go build -o /app/netqueue-server ./cmd/queue/main.go
+
+FROM alpine:3.18
+WORKDIR /app
+COPY --from=builder /app/netqueue-server /app/netqueue-server
+RUN chmod +x /app/netqueue-server
+EXPOSE 9000
+ENTRYPOINT ["/app/netqueue-server"]
