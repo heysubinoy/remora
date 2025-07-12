@@ -9,19 +9,20 @@ A modern, web-based distributed job execution system built with Go and Next.js t
 - **REST API Server**: High-performance Gin-based API with comprehensive endpoints
 - **Modern Web Interface**: React/Next.js frontend with real-time updates and dark mode
 - **Remote SSH Execution**: Execute commands and scripts on remote servers via SSH
-- **RabbitMQ Integration**: Reliable message queuing with automatic fallback to in-memory queue
-- **Decoupled Architecture**: API server, worker, and web frontend run as independent services
+- **Custom NetQueue**: Lightweight TCP-based message queue for job distribution
+- **Decoupled Architecture**: API server, worker, queue server, and web frontend run as independent services
 - **Database Storage**: PostgreSQL/SQLite support for job metadata and server configurations
 
 ### Job Management
 
-- **Real-time Monitoring**: Live job status tracking with Server-Sent Events (SSE)
+- **Real-time Monitoring**: Live job status tracking with optimized polling (2-second intervals)
 - **Job Cancellation**: Cancel running or queued jobs instantly
 - **Job Duplication**: Clone existing jobs with parameter modifications
 - **Shell Script Execution**: Submit and execute multi-line shell scripts
 - **Job Priorities**: Priority-based job scheduling (1-10 scale)
 - **Timeout Management**: Configurable job execution timeouts
 - **Live Output Streaming**: Real-time stdout/stderr streaming in web interface
+- **Incremental Database Updates**: Backend updates job output every 2 seconds for consistent real-time experience
 
 ### Server Management
 
@@ -39,6 +40,7 @@ A modern, web-based distributed job execution system built with Go and Next.js t
 - **Pagination**: Efficient handling of large job datasets
 - **Dark/Light Theme**: User preference-based theming
 - **Keyboard Shortcuts**: Power-user productivity features
+- **Scrollable Live Job Status**: Modal-based live job monitoring with scrollable output
 
 ### Developer Tools
 
@@ -54,9 +56,10 @@ A modern, web-based distributed job execution system built with Go and Next.js t
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Frontend  │────│   REST API      │────│   RabbitMQ      │
-│   (Next.js)     │    │   (Go/Gin)      │    │   (Message      │
+│   Web Frontend  │────│   REST API      │────│   NetQueue      │
+│   (Next.js)     │    │   (Go/Gin)      │    │   (TCP-based    │
 │   Port: 3000    │    │   Port: 8080    │    │    Queue)       │
+│                 │    │                 │    │   Port: 9000    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                               │                         │
                               │                         │
@@ -75,33 +78,40 @@ A modern, web-based distributed job execution system built with Go and Next.js t
 
 ### Component Overview
 
-- **Web Frontend**: Modern React/Next.js dashboard with real-time updates
-- **API Server**: RESTful API handling job submission, server management, and real-time events
-- **Worker Service**: Background job processor with SSH execution capabilities
-- **Message Queue**: RabbitMQ for reliable job distribution and real-time notifications
+- **Web Frontend**: Modern React/Next.js dashboard with optimized polling for real-time updates
+- **API Server**: RESTful API handling job submission, server management, and job status retrieval
+- **NetQueue Server**: Lightweight TCP-based message queue for job distribution and management
+- **Worker Service**: Background job processor with SSH execution capabilities and 2-second database updates
 - **Database**: PostgreSQL for production or SQLite for development
 - **Remote Servers**: Target machines accessed via SSH for command execution
 
 ### Data Flow
 
 1. **Job Submission**: Web interface or API submits jobs to the REST API
-2. **Queue Distribution**: API server pushes jobs to RabbitMQ queue
-3. **Worker Processing**: Worker service pulls jobs and executes via SSH
-4. **Real-time Updates**: Status changes broadcast via SSE to web interface
-5. **Result Storage**: Job outputs and metadata stored in database
+2. **Queue Distribution**: API server pushes jobs to NetQueue server
+3. **Worker Processing**: Worker service pulls jobs from NetQueue and executes via SSH
+4. **Real-time Updates**: Status changes and output updates via optimized polling (2-second intervals)
+5. **Result Storage**: Job outputs and metadata stored in database with incremental updates
+
+### Real-time Update Architecture
+
+- **Frontend Polling**: Main job list polls every 2 seconds, modal logs poll every 2 seconds
+- **Backend Updates**: Worker updates database every 2 seconds (or every 10 lines, whichever comes first)
+- **Optimized Performance**: Smart polling with change detection to minimize unnecessary updates
+- **Live Job Status**: Dedicated component for running jobs with scrollable real-time output
 
 ## 🚀 Quick Start
 
 ### Option 1: Docker Deployment (Recommended)
 
-The easiest way to get started is using Docker Compose, which provides a complete system with PostgreSQL, RabbitMQ, API server, worker, and web frontend.
+The easiest way to get started is using Docker Compose, which provides a complete system with PostgreSQL, NetQueue, API server, worker, and web frontend.
 
 #### Prerequisites
 
 - Docker 20.10+
 - Docker Compose 2.0+
 - At least 2GB RAM
-- Ports 3000, 5432, 5672, 8080, 15672 available
+- Ports 3000, 5432, 9000, 8080 available
 
 #### Start the Complete System
 
@@ -133,11 +143,11 @@ docker compose up -d
 
 After startup (~2-3 minutes), access these services:
 
-| Service                 | URL                    | Description                             |
-| ----------------------- | ---------------------- | --------------------------------------- |
-| **Web Dashboard**       | http://localhost:3000  | Modern web interface for job management |
-| **API Server**          | http://localhost:8080  | REST API endpoints                      |
-| **RabbitMQ Management** | http://localhost:15672 | Message queue admin (admin/password123) |
+| Service             | URL                   | Description                             |
+| ------------------- | --------------------- | --------------------------------------- |
+| **Web Dashboard**   | http://localhost:3000 | Modern web interface for job management |
+| **API Server**      | http://localhost:8080 | REST API endpoints                      |
+| **NetQueue Server** | localhost:9000        | TCP-based message queue                 |
 
 #### First Steps
 
@@ -164,7 +174,6 @@ node --version
 npm --version
 
 # PostgreSQL (optional - will use SQLite if not available)
-# RabbitMQ (optional - will use in-memory queue if not available)
 ```
 
 #### 2. Start Backend Services
@@ -180,12 +189,16 @@ go mod tidy
 # Build applications
 go build -o bin/job-executor-api ./cmd/api
 go build -o bin/job-executor-worker ./cmd/worker
+go build -o bin/netqueue-server ./cmd/queue
 go build -o bin/job-executor-client ./cmd/client
 
 # Set environment variables (optional)
 export DATABASE_URL="./jobs.db"  # SQLite
-export RABBITMQ_URL="amqp://guest:guest@localhost:5672/"
+export NETQUEUE_ADDR="localhost:9000"
 export SERVER_ADDR=":8080"
+
+# Start NetQueue server (in background)
+./bin/netqueue-server &
 
 # Start worker (in background)
 ./bin/job-executor-worker &
@@ -243,11 +256,10 @@ curl http://localhost:8080/health
 - `POST /api/v1/jobs/:id/duplicate` - Duplicate an existing job
 - `POST /api/v1/jobs/:id/rerun` - Rerun a completed job
 - `GET /api/v1/jobs/:id` - Get job details
-- `POST /api/v1/jobs/:id/cancel` - Cancel a running job
-- `GET /api/v1/jobs/:id/logs` - Get complete job logs
+- `POST /api/v1/jobs/:id/cancel` - Cancel a running or queued job
+- `GET /api/v1/jobs/:id/logs` - Get complete job logs (used for real-time polling)
 - `GET /api/v1/jobs/:id/stdout` - Get job stdout
 - `GET /api/v1/jobs/:id/stderr` - Get job stderr
-- `GET /api/v1/jobs/:id/stream` - Stream job output (Server-Sent Events)
 - `GET /api/v1/jobs` - List jobs with filtering and pagination
 
 ### Server Management
@@ -281,20 +293,19 @@ SERVER_ADDR=":8080"                              # API server listen address
 DATABASE_URL="./jobs.db"                         # Database connection string
 CORS_ALLOWED_ORIGINS="http://localhost:3000"     # CORS origins for web frontend
 
-# Message Queue Configuration
-RABBITMQ_URL="amqp://guest:guest@localhost:5672/" # RabbitMQ connection URL
-QUEUE_NAME="job_queue"                            # Job queue name
-QUEUE_DURABLE="true"                              # Queue persistence
+# NetQueue Configuration
+NETQUEUE_ADDR="localhost:9000"                   # NetQueue server address
+QUEUE_NAME="job_queue"                           # Job queue name
 
 # Worker Configuration
-WORKER_CONCURRENCY="5"                            # Number of concurrent job workers
-WORKER_POLL_INTERVAL="5s"                        # Job polling interval
+WORKER_CONCURRENCY="5"                           # Number of concurrent job workers
+WORKER_POOL_SIZE="16"                           # Worker pool size (default: CPU cores * 4)
 SSH_CONNECTION_TIMEOUT="30s"                     # SSH connection timeout
 SSH_EXECUTION_TIMEOUT="300s"                     # Default job execution timeout
 
 # Web Frontend Configuration (Next.js)
 NEXT_PUBLIC_API_URL="http://localhost:8080"      # API server URL for frontend
-NEXT_PUBLIC_WS_URL="http://localhost:8080"       # WebSocket/SSE URL for real-time updates
+NEXT_PUBLIC_BACKEND_URL="http://localhost:8080"  # Backend URL for polling
 
 # Security Configuration
 ALLOWED_SHELLS="/bin/bash,/bin/sh,/usr/bin/zsh"  # Allowed shell executables
@@ -383,7 +394,6 @@ export DATABASE_URL="./jobs.db"
 
 Note: Both `server_id` and `timeout` are optional in duplicate requests. If not provided, the original job's values will be used.
 
-`````markdown
 ## Server Configuration Format
 
 ```json
@@ -497,18 +507,54 @@ curl -X POST http://localhost:8080/api/v1/jobs/script \
 
 ### 4. Monitoring Job Output in Real-time
 
-```bash
-# Use Server-Sent Events to monitor job output
-curl -N http://localhost:8080/api/v1/jobs/job-id-here/stream
-```
+The web interface automatically polls for job updates every 2 seconds. For running jobs, the modal provides a scrollable live view of the output with separate tabs for stdout, stderr, and combined output.
 
-This will provide real-time updates including:
+## Architecture Changes
 
-- Job status changes
-- Live output from stdout/stderr
-- Completion notifications
+### Recent Updates
 
-```
+- **Replaced RabbitMQ with NetQueue**: Lightweight TCP-based message queue for better performance and simplicity
+- **Optimized Real-time Updates**: Replaced Server-Sent Events (SSE) with efficient polling mechanism
+- **Enhanced Live Job Monitoring**: Dedicated `LiveJobStatus` component with scrollable output for running jobs
+- **Improved Database Updates**: Backend now updates job output every 2 seconds for consistent real-time experience
+- **Smart Polling**: Frontend uses optimized polling with change detection to minimize unnecessary API calls
 
-```
-`````
+### Performance Improvements
+
+- **2-Second Update Cycle**: Synchronized polling between frontend and backend for optimal real-time experience
+- **Incremental Database Updates**: Worker updates database every 2 seconds or every 10 lines, whichever comes first
+- **Optimized Frontend Polling**: Main job list polls every 2 seconds, modal logs poll every 2 seconds
+- **Change Detection**: Smart polling prevents unnecessary re-renders when data hasn't changed
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For support and questions:
+
+- Create an issue on GitHub
+- Check the [documentation](docs/)
+- Review the [examples](examples/)
+
+## Roadmap
+
+- [ ] Authentication and authorization
+- [ ] Job scheduling and cron-like functionality
+- [ ] Advanced job dependencies and workflows
+- [ ] Metrics and monitoring dashboard
+- [ ] Multi-tenant support
+- [ ] API rate limiting and quotas
+- [ ] Job templates and reusable scripts
+- [ ] Advanced SSH key management
+- [ ] Job output compression and archiving
+- [ ] Webhook notifications

@@ -44,7 +44,6 @@ func setupCommonRoutes(router *gin.Engine, api *API) {
 		v1.GET("/jobs/:id/logs", api.GetJobLogs)
 		v1.GET("/jobs/:id/stdout", api.GetJobStdout)
 		v1.GET("/jobs/:id/stderr", api.GetJobStderr)
-		v1.GET("/jobs/:id/stream", api.StreamJob)
 		v1.GET("/jobs", api.ListJobs)
 
 		// Server configuration routes
@@ -56,10 +55,10 @@ func setupCommonRoutes(router *gin.Engine, api *API) {
 		v1.POST("/servers/:id/test", api.TestServerConnection)
 		v1.GET("/servers/:id/status", api.CheckServerStatus)
 		v1.GET("/servers/status/all", api.CheckAllServersStatus)
-		
+
 		// System info route
 		v1.GET("/system/info", api.GetSystemInfo)
-		
+
 		// PEM file upload route
 		v1.POST("/pem-files/upload", api.UploadPemFile)
 	}
@@ -75,5 +74,4 @@ func setupCommonRoutes(router *gin.Engine, api *API) {
 		c.File("./web/index.html")
 	})
 
-	
 }

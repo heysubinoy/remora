@@ -288,12 +288,17 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
               </Button>
             )}
 
-          {job.status === "running" && (
+          {(job.status === "running" || job.status === "queued") && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onCancel(job.id)}
               className="transition-all duration-200 hover:scale-105 hover:text-orange-500"
+              title={
+                job.status === "running"
+                  ? "Cancel running job"
+                  : "Cancel queued job"
+              }
             >
               <StopCircle className="h-4 w-4" />
             </Button>

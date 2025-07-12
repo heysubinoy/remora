@@ -352,7 +352,7 @@ export function useRealJobs(params?: {
     startPolling,
     stopPolling,
   } = useOptimizedPolling(fetchJobs, {
-    interval: 5000,
+    interval: 2000, // Poll every 2 seconds for more real-time updates
     enabled: true,
     immediate: true,
     compareFunction: (prev, next) => {

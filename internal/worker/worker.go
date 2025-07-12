@@ -9,6 +9,8 @@ import (
 	"job-executor/internal/ssh"
 	"job-executor/internal/storage"
 	"log/slog"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,8 +26,9 @@ type Worker struct {
 	mu         sync.RWMutex
 	jobChan    chan *models.Job
 	workerPool int
-	activeJobs int64        // Counter for active jobs
-	jobCountMu sync.RWMutex // Mutex for job counter
+	activeJobs int64         // Counter for active jobs
+	jobCountMu sync.RWMutex  // Mutex for job counter
+	semaphore  chan struct{} // Semaphore to limit concurrent jobs
 }
 
 func New(db *gorm.DB, queue queue.NetQueue, storage storage.StorageService) *Worker {
@@ -33,13 +36,20 @@ func New(db *gorm.DB, queue queue.NetQueue, storage storage.StorageService) *Wor
 	// Buffer size should accommodate multiple batches of concurrent jobs
 	bufferSize := 500 // Increased buffer for higher throughput
 
+	workerPoolSize := 16 // Default value
+	if envVal := os.Getenv("WORKER_CONCURRENCY"); envVal != "" {
+		if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
+			workerPoolSize = n
+		}
+	}
 	return &Worker{
 		db:         db,
 		queue:      queue,
 		storage:    storage,
 		running:    make(map[string]context.CancelFunc),
 		jobChan:    make(chan *models.Job, bufferSize), // Larger buffered channel
-		workerPool: 16,                                 // Default higher pool size, will be overridden by config
+		workerPool: workerPoolSize,
+		semaphore:  make(chan struct{}, workerPoolSize), // Initialize semaphore
 	}
 }
 
@@ -49,6 +59,7 @@ func (w *Worker) SetWorkerPoolSize(size int) {
 		size = 1
 	}
 	w.workerPool = size
+	w.semaphore = make(chan struct{}, size) // Update semaphore size
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -141,6 +152,20 @@ func (w *Worker) processJobWrapper(job *models.Job) {
 }
 
 func (w *Worker) processJob(ctx context.Context, job *models.Job) {
+	// Acquire semaphore to limit concurrent jobs
+	select {
+	case w.semaphore <- struct{}{}:
+		// Got a slot, proceed
+	case <-ctx.Done():
+		// Context was canceled, don't process
+		return
+	}
+
+	// Release semaphore when done
+	defer func() {
+		<-w.semaphore
+	}()
+
 	// Increment active job counter
 	w.jobCountMu.Lock()
 	w.activeJobs++
@@ -278,10 +303,12 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	var outputBuilder strings.Builder
 	var errorBuilder strings.Builder
 	var lineCount int
+	var lastUpdateTime time.Time
 
 	// Streaming callback for real-time output
 	streamCallback := func(output string, isStderr bool) {
 		lineCount++
+		now := time.Now()
 
 		// Store in builders for final database update
 		if isStderr {
@@ -290,13 +317,7 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 			outputBuilder.WriteString(output)
 		}
 
-		// Publish output event to RabbitMQ for real-time streaming
-		// This replaces the old broadcast system and supports multiple SSE clients
-		if err := w.queue.PublishOutputEvent(job.ID, output, isStderr, lineCount); err != nil {
-			slog.Warn("Failed to publish output event", "job_id", job.ID, "error", err)
-		}
-
-		// Also update the job's output field incrementally for live monitoring
+		// Update the job's output field incrementally for live monitoring
 		if isStderr {
 			job.Stderr = errorBuilder.String()
 		} else {
@@ -305,8 +326,9 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 		}
 
 		// Update job in database periodically (every 10 lines or every 2 seconds)
-		if lineCount%10 == 0 {
+		if lineCount%10 == 0 || now.Sub(lastUpdateTime) >= 2*time.Second {
 			w.updateJob(job)
+			lastUpdateTime = now
 		}
 	}
 
