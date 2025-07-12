@@ -177,7 +177,7 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	}
 
 	// Update job status to running
-	now := time.Now()
+	now := time.Now().UTC()
 	job.Status = models.StatusRunning
 	job.StartedAt = &now
 	w.updateJob(job)
@@ -198,7 +198,7 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	// Fetch server configuration for this job
 	var server models.Server
 	if err := w.db.First(&server, "id = ?", job.ServerID).Error; err != nil {
-		finishedAt := time.Now()
+		finishedAt := time.Now().UTC()
 		job.Status = models.StatusFailed
 		job.Error = fmt.Sprintf("Failed to fetch server configuration: %v", err)
 		job.FinishedAt = &finishedAt
@@ -337,7 +337,7 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	result, err := sshClient.ExecuteStreaming(jobCtx, fullCommand, timeout, streamCallback)
 
 	// Update job with results
-	finishedAt := time.Now()
+	finishedAt := time.Now().UTC()
 	job.FinishedAt = &finishedAt
 	duration := finishedAt.Sub(*job.StartedAt)
 
@@ -449,7 +449,7 @@ func (w *Worker) CancelJob(jobID string) error {
 			return err
 		}
 
-		now := time.Now()
+		now := time.Now().UTC()
 		job.Status = models.StatusCanceled
 		job.FinishedAt = &now
 
@@ -487,7 +487,7 @@ func (w *Worker) handleCancelMessage(jobID string) {
 			return
 		}
 
-		now := time.Now()
+		now := time.Now().UTC()
 		job.Status = models.StatusCanceled
 		job.FinishedAt = &now
 
@@ -574,7 +574,7 @@ func (w *Worker) checkForCancellations() {
 			cancel()
 
 			// Update job status
-			now := time.Now()
+			now := time.Now().UTC()
 			job.FinishedAt = &now
 
 			if err := w.db.Save(&job).Error; err != nil {

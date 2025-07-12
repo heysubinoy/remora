@@ -24,11 +24,11 @@ type ServerStatus struct {
 
 // checkServerReachability checks if a server is reachable using netcat or platform-specific commands
 func checkServerReachability(hostname string, port int) ServerStatus {
-	checkedAt := time.Now()
-	
+	checkedAt := time.Now().UTC()
+
 	var cmd *exec.Cmd
 	var cmdDesc string
-	
+
 	// Use platform-specific commands
 	switch runtime.GOOS {
 	case "windows":
@@ -41,7 +41,7 @@ func checkServerReachability(hostname string, port int) ServerStatus {
 		cmd = exec.Command("nc", "-z", "-v", "-w", "2", hostname, fmt.Sprintf("%d", port))
 		cmdDesc = fmt.Sprintf("nc -z -v -w 2 %s %d", hostname, port)
 	}
-	
+
 	// Set a timeout for the command
 	timeout := 5 * time.Second
 	timer := time.AfterFunc(timeout, func() {
@@ -50,10 +50,10 @@ func checkServerReachability(hostname string, port int) ServerStatus {
 		}
 	})
 	defer timer.Stop()
-	
+
 	// Run the command
 	err := cmd.Run()
-	
+
 	if err != nil {
 		return ServerStatus{
 			Status:    "disconnected",
@@ -61,7 +61,7 @@ func checkServerReachability(hostname string, port int) ServerStatus {
 			CheckedAt: checkedAt,
 		}
 	}
-	
+
 	return ServerStatus{
 		Status:    "connected",
 		Message:   fmt.Sprintf("Server %s:%d is reachable", hostname, port),
@@ -87,7 +87,7 @@ func (api *API) UploadPemFile(c *gin.Context) {
 		return
 	}
 
-	api.logger.Info("PEM file uploaded successfully", 
+	api.logger.Info("PEM file uploaded successfully",
 		slog.String("filename", header.Filename),
 		slog.String("url", url))
 
@@ -269,8 +269,8 @@ func (api *API) DeleteServer(c *gin.Context) {
 
 	if activeJobCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{
-			"error": "Cannot delete server with active jobs",
-			"details": "This server has jobs that are currently queued or running. Please wait for them to complete or cancel them before deleting the server.",
+			"error":       "Cannot delete server with active jobs",
+			"details":     "This server has jobs that are currently queued or running. Please wait for them to complete or cancel them before deleting the server.",
 			"active_jobs": activeJobCount,
 		})
 		return
@@ -278,7 +278,7 @@ func (api *API) DeleteServer(c *gin.Context) {
 
 	// Check for force deletion parameter
 	force := c.Query("force") == "true"
-	
+
 	// Check if there are any completed jobs for this server
 	var totalJobCount int64
 	if err := api.db.Model(&models.Job{}).Where("server_id = ?", serverID).Count(&totalJobCount).Error; err != nil {
@@ -288,8 +288,8 @@ func (api *API) DeleteServer(c *gin.Context) {
 
 	if totalJobCount > 0 && !force {
 		c.JSON(http.StatusConflict, gin.H{
-			"error": "Server has associated job history",
-			"details": "This server has job history records. Add '?force=true' to delete the server and all associated job records.",
+			"error":      "Server has associated job history",
+			"details":    "This server has job history records. Add '?force=true' to delete the server and all associated job records.",
 			"total_jobs": totalJobCount,
 		})
 		return
@@ -331,7 +331,7 @@ func (api *API) DeleteServer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": responseMessage,
+		"message":      responseMessage,
 		"deleted_jobs": totalJobCount,
 	})
 }
@@ -385,7 +385,7 @@ func (api *API) TestServerConnection(c *gin.Context) {
 		PrivateKey: server.PrivateKey,
 		PemFileURL: server.PemFileURL,
 	}
-	
+
 	// Use PEM file if provided (legacy support)
 	if server.PemFile != "" {
 		sshConfig.PrivateKey = server.PemFile
@@ -401,11 +401,11 @@ func (api *API) TestServerConnection(c *gin.Context) {
 
 	// Test the connection
 	if err := sshClient.TestConnection(c.Request.Context()); err != nil {
-		api.logger.Error("SSH connection test failed", 
+		api.logger.Error("SSH connection test failed",
 			slog.String("server_id", server.ID),
 			slog.String("hostname", server.Hostname),
 			slog.Any("error", err))
-		
+
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"server_id": server.ID,
 			"status":    "connection_failed",
@@ -414,7 +414,7 @@ func (api *API) TestServerConnection(c *gin.Context) {
 		return
 	}
 
-	api.logger.Info("SSH connection test successful", 
+	api.logger.Info("SSH connection test successful",
 		slog.String("server_id", server.ID),
 		slog.String("hostname", server.Hostname))
 
@@ -441,8 +441,8 @@ func (api *API) CheckServerStatus(c *gin.Context) {
 
 	// Use netcat to check if port is open
 	status := checkServerReachability(server.Hostname, server.Port)
-	
-	api.logger.Info("Server status check completed", 
+
+	api.logger.Info("Server status check completed",
 		slog.String("server_id", server.ID),
 		slog.String("hostname", server.Hostname),
 		slog.Int("port", server.Port),
@@ -462,12 +462,12 @@ func (api *API) CheckServerStatus(c *gin.Context) {
 // CheckAllServersStatus checks the status of all servers
 func (api *API) CheckAllServersStatus(c *gin.Context) {
 	var servers []models.Server
-	
+
 	// Get query parameters
 	active := c.Query("active")
-	
+
 	query := api.db.Model(&models.Server{})
-	
+
 	if active != "" {
 		isActive := active == "true"
 		query = query.Where("is_active = ?", isActive)
@@ -482,7 +482,7 @@ func (api *API) CheckAllServersStatus(c *gin.Context) {
 	var serverStatuses []gin.H
 	for _, server := range servers {
 		status := checkServerReachability(server.Hostname, server.Port)
-		
+
 		serverStatuses = append(serverStatuses, gin.H{
 			"server_id":   server.ID,
 			"server_name": server.Name,
@@ -504,7 +504,7 @@ func (api *API) CheckAllServersStatus(c *gin.Context) {
 		}
 	}
 
-	api.logger.Info("All servers status check completed", 
+	api.logger.Info("All servers status check completed",
 		slog.Int("total_servers", len(servers)),
 		slog.Int("connected", connected),
 		slog.Int("disconnected", disconnected))
@@ -571,13 +571,13 @@ func (api *API) GetSystemInfo(c *gin.Context) {
 		slog.Int64("failed_jobs", failedJobs))
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_servers":   totalServers,
-		"total_jobs":      totalJobs,
-		"completed_jobs":  completedJobs,
-		"running_jobs":    runningJobs,
-		"failed_jobs":     failedJobs,
-		"queued_jobs":     queuedJobs,
-		"success_rate":    float64(completedJobs) / float64(totalJobs) * 100,
-		"timestamp":       time.Now().Format(time.RFC3339),
+		"total_servers":  totalServers,
+		"total_jobs":     totalJobs,
+		"completed_jobs": completedJobs,
+		"running_jobs":   runningJobs,
+		"failed_jobs":    failedJobs,
+		"queued_jobs":    queuedJobs,
+		"success_rate":   float64(completedJobs) / float64(totalJobs) * 100,
+		"timestamp":      time.Now().UTC().Format(time.RFC3339),
 	})
 }

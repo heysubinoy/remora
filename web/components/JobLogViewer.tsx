@@ -36,13 +36,33 @@ export const JobLogViewer: React.FC<Props> = ({ jobId }) => {
           {status.started_at && (
             <p>
               <strong>Started:</strong>{" "}
-              {new Date(status.started_at).toLocaleString()}
+              {(() => {
+                const startDate = new Date(status.started_at);
+                return (
+                  <>
+                    <span title="UTC Time">{startDate.toUTCString()}</span>
+                    <br />
+                    <span title="Local Time">{startDate.toLocaleString()}</span>
+                  </>
+                );
+              })()}
             </p>
           )}
           {status.finished_at && (
             <p>
               <strong>Finished:</strong>{" "}
-              {new Date(status.finished_at).toLocaleString()}
+              {(() => {
+                const finishDate = new Date(status.finished_at);
+                return (
+                  <>
+                    <span title="UTC Time">{finishDate.toUTCString()}</span>
+                    <br />
+                    <span title="Local Time">
+                      {finishDate.toLocaleString()}
+                    </span>
+                  </>
+                );
+              })()}
             </p>
           )}
           {status.duration && (

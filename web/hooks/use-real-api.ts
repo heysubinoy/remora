@@ -45,6 +45,14 @@ const convertGoJobToJob = (goJob: GoJob): Job => {
     durationMs = endTime.getTime() - startTime.getTime();
   }
 
+  // Ensure all dates are properly parsed as UTC
+  const parseUTCDate = (dateString: string | undefined) => {
+    if (!dateString) return undefined;
+    // Force UTC parsing by ensuring the string ends with Z or adding it
+    const utcString = dateString.endsWith("Z") ? dateString : dateString + "Z";
+    return new Date(utcString);
+  };
+
   return {
     id: goJob.id,
     serverId: goJob.server_id,
@@ -66,12 +74,12 @@ const convertGoJobToJob = (goJob: GoJob): Job => {
         : goJob.status === "canceled"
         ? "cancelled"
         : "cancelled",
-    created: new Date(goJob.created_at),
+    created: parseUTCDate(goJob.created_at),
     created_at: goJob.created_at,
     updated_at: goJob.updated_at,
-    startedAt: goJob.started_at ? new Date(goJob.started_at) : undefined,
+    startedAt: parseUTCDate(goJob.started_at),
     started_at: goJob.started_at,
-    finishedAt: goJob.finished_at ? new Date(goJob.finished_at) : undefined,
+    finishedAt: parseUTCDate(goJob.finished_at),
     finished_at: goJob.finished_at,
     duration: durationMs,
     exitCode: goJob.exit_code || null,

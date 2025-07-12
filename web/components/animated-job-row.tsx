@@ -211,7 +211,15 @@ export const AnimatedJobRow = memo(function AnimatedJobRow({
               : "Unknown"}
           </span>
           <span className="text-xs opacity-70">
-            {job.created ? job.created.toLocaleString() : "N/A"}
+            {job.created ? (
+              <>
+                <span title="UTC Time">{job.created.toUTCString()}</span>
+                <br />
+                <span title="Local Time">{job.created.toLocaleString()}</span>
+              </>
+            ) : (
+              "N/A"
+            )}
           </span>
         </div>
       </TableCell>

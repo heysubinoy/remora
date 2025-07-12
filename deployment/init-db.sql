@@ -68,19 +68,9 @@ BEGIN
     END IF;
 END $$;
 
--- Trigger function to update updated_at column
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-   NEW.updated_at = NOW();
-   RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Trigger for jobs table
-CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE
-ON jobs FOR EACH ROW EXECUTE PROCEDURE 
-update_updated_at_column();
+-- Remove the update_jobs_updated_at trigger and function if they exist
+DROP TRIGGER IF EXISTS update_jobs_updated_at ON jobs;
+DROP FUNCTION IF EXISTS update_updated_at_column();
 
 -- Insert a test server if not exists
 INSERT INTO servers (id, name, hostname, port, "user", auth_type, password, is_active, created_at, updated_at)

@@ -302,7 +302,7 @@ func (api *API) CancelJob(c *gin.Context) {
 		// For running jobs, mark as canceled in database
 		// The worker will pick this up via polling and cancel the actual process
 		job.Status = models.StatusCanceled
-		now := time.Now()
+		now := time.Now().UTC()
 		job.FinishedAt = &now
 
 		if err := api.db.Save(&job).Error; err != nil {
@@ -329,7 +329,7 @@ func (api *API) CancelJob(c *gin.Context) {
 	case models.StatusQueued:
 		// For queued jobs, directly update the status since they haven't started yet
 		job.Status = models.StatusCanceled
-		now := time.Now()
+		now := time.Now().UTC()
 		job.FinishedAt = &now
 
 		if err := api.db.Save(&job).Error; err != nil {

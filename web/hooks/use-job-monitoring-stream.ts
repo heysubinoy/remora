@@ -50,6 +50,16 @@ export const useJobMonitoringStream = (
   const convertJob = useCallback((goJob: JobStatusUpdate): Job => {
     const duration = goJob.duration ? parseInt(goJob.duration) / 1000000 : 0; // Convert nanoseconds to milliseconds
 
+    // Ensure all dates are properly parsed as UTC
+    const parseUTCDate = (dateString: string | undefined) => {
+      if (!dateString) return undefined;
+      // Force UTC parsing by ensuring the string ends with Z or adding it
+      const utcString = dateString.endsWith("Z")
+        ? dateString
+        : dateString + "Z";
+      return new Date(utcString);
+    };
+
     return {
       id: goJob.id,
       server_id: goJob.server_id,
@@ -72,9 +82,9 @@ export const useJobMonitoringStream = (
       stderr: goJob.stderr,
       original_script: goJob.original_script,
       server: goJob.server,
-      created: goJob.created_at ? new Date(goJob.created_at) : undefined,
-      startedAt: goJob.started_at ? new Date(goJob.started_at) : undefined,
-      finishedAt: goJob.finished_at ? new Date(goJob.finished_at) : undefined,
+      created: parseUTCDate(goJob.created_at),
+      startedAt: parseUTCDate(goJob.started_at),
+      finishedAt: parseUTCDate(goJob.finished_at),
     };
   }, []);
 
