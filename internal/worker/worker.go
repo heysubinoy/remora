@@ -85,14 +85,9 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 	slog.Info("Queue consumer started successfully")
 
-	// Start consuming cancellation messages
-	slog.Info("Attempting to start cancel consumer")
-	if err := w.queue.StartCancelConsumer(ctx, w.handleCancelMessage); err != nil {
-		slog.Error("Failed to start cancel consumer", "error", err)
-		// Continue without cancellation support
-	} else {
-		slog.Info("Cancel consumer started successfully")
-	}
+	// Start cancellation polling (since NetQueue doesn't support proper cancel consumption)
+	slog.Info("Starting cancellation polling")
+	go w.startCancellationPolling(ctx)
 
 	// Start periodic stats logging
 	statsTicker := time.NewTicker(30 * time.Second) // Log stats every 30 seconds
@@ -316,6 +311,29 @@ func (w *Worker) processJob(ctx context.Context, job *models.Job) {
 	}
 
 	// Execute command via SSH with streaming
+	// Also start a goroutine to check for cancellation during execution
+	cancelCheckTicker := time.NewTicker(1 * time.Second)
+	defer cancelCheckTicker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-cancelCheckTicker.C:
+				// Check if job has been marked as canceled in database
+				var checkJob models.Job
+				if err := w.db.First(&checkJob, "id = ?", job.ID).Error; err == nil {
+					if checkJob.Status == models.StatusCanceled {
+						slog.Info("Job marked as canceled during execution, canceling context", "job_id", job.ID)
+						cancel()
+						return
+					}
+				}
+			}
+		}
+	}()
+
 	result, err := sshClient.ExecuteStreaming(jobCtx, fullCommand, timeout, streamCallback)
 
 	// Update job with results
@@ -516,4 +534,54 @@ func (w *Worker) LogWorkerStats() {
 		"queue_size", stats["queue_size"],
 		"queue_capacity", stats["queue_capacity"],
 		"running_jobs", stats["running_jobs"])
+}
+
+// startCancellationPolling polls the database for jobs that need to be canceled
+func (w *Worker) startCancellationPolling(ctx context.Context) {
+	ticker := time.NewTicker(2 * time.Second) // Check every 2 seconds
+	defer ticker.Stop()
+
+	slog.Info("Cancellation polling started")
+
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("Cancellation polling stopped")
+			return
+		case <-ticker.C:
+			w.checkForCancellations()
+		}
+	}
+}
+
+// checkForCancellations checks for jobs that have been marked for cancellation
+func (w *Worker) checkForCancellations() {
+	// Get all running jobs that have been marked for cancellation
+	var jobs []models.Job
+	if err := w.db.Where("status = ?", models.StatusCanceled).Find(&jobs).Error; err != nil {
+		slog.Error("Failed to fetch canceled jobs", "error", err)
+		return
+	}
+
+	for _, job := range jobs {
+		// Check if this job is currently running in our worker
+		w.mu.RLock()
+		cancel, exists := w.running[job.ID]
+		w.mu.RUnlock()
+
+		if exists {
+			slog.Info("Canceling running job via polling", "job_id", job.ID)
+			cancel()
+
+			// Update job status
+			now := time.Now()
+			job.FinishedAt = &now
+
+			if err := w.db.Save(&job).Error; err != nil {
+				slog.Error("Failed to update canceled job status", "job_id", job.ID, "error", err)
+			} else {
+				slog.Info("Job successfully canceled via polling", "job_id", job.ID)
+			}
+		}
+	}
 }
