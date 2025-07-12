@@ -163,7 +163,7 @@ If tests fail:
 2. Ensure API server is running on port 8080
 3. Verify `billa.pem` file exists and has correct permissions
 4. Check server connectivity (SSH access to 20.193.249.175)
-5. Validate RabbitMQ is running for job queuing
+5. Validate NetQueue is running for job queuing
 
 ## 🎯 What This Validates
 
@@ -174,7 +174,7 @@ The comprehensive test suite validates:
 - **Server Management**: Server creation, validation, and cleanup
 - **Job Execution**: Various job types execute correctly
 - **SSH Integration**: Remote command execution works
-- **Queue System**: RabbitMQ job queuing and processing
+- **Queue System**: NetQueue job queuing and processing
 - **Real-time Updates**: Job status updates are properly tracked
 - **Error Handling**: Failed jobs are properly handled
 - **Cancellation**: Manual job cancellation works

@@ -593,7 +593,7 @@ func (api *API) StreamJob(c *gin.Context) {
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
 
-	// Start consuming real-time output events from RabbitMQ
+	// Start consuming real-time output events from NetQueue
 	// This creates a unique temporary queue for this SSE client
 	var outputStarted bool
 	if job.Status == models.StatusRunning {

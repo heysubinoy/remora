@@ -71,12 +71,12 @@ check_worker_health() {
         fi
         
         # Check network connectivity
-        if docker exec job-executor-worker nc -z rabbitmq 5672 2>/dev/null; then
-            print_success "Worker can reach RabbitMQ"
-        else
-            print_error "Worker cannot reach RabbitMQ"
-            return 1
-        fi
+        if docker exec job-executor-worker nc -z netqueue 9000 2>/dev/null; then
+print_success "Worker can reach NetQueue"
+else
+print_error "Worker cannot reach NetQueue"
+return 1
+fi
         
         if docker exec job-executor-worker nc -z postgres 5432 2>/dev/null; then
             print_success "Worker can reach PostgreSQL"
@@ -117,12 +117,12 @@ run_diagnostics() {
             print_error "API is not responding"
         fi
         
-        # Basic RabbitMQ check
-        if curl -s http://localhost:15672/api/overview > /dev/null; then
-            print_success "RabbitMQ management is accessible"
-        else
-            print_error "RabbitMQ management is not accessible"
-        fi
+        # Basic NetQueue check
+if curl -s http://localhost:9000/health > /dev/null; then
+print_success "NetQueue health endpoint is accessible"
+else
+print_error "NetQueue health endpoint is not accessible"
+fi
     fi
 }
 
@@ -168,7 +168,7 @@ main() {
             
             # Wait for services
             wait_for_service "API" "http://localhost:8080/health"
-            wait_for_service "RabbitMQ" "http://localhost:15672"
+            wait_for_service "NetQueue" "http://localhost:9000/health"
             
             # Check worker health
             sleep 10

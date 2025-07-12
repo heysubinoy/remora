@@ -66,8 +66,8 @@ start_system() {
     fi
     
     # Start core services (without nginx by default)
-    print_status "Starting core services (PostgreSQL, RabbitMQ, API, Worker, Frontend)..."
-    $COMPOSE_CMD up -d postgres rabbitmq job-executor-api job-executor-worker job-executor-frontend
+    print_status "Starting core services (PostgreSQL, NetQueue, API, Worker, Frontend)..."
+$COMPOSE_CMD up -d postgres netqueue job-executor-api job-executor-worker job-executor-frontend
     
     print_status "Waiting for services to be healthy..."
     sleep 10
@@ -81,7 +81,7 @@ start_system() {
     print_status "Service URLs:"
     echo "  🌐 Frontend (Next.js):     http://localhost:3000"
     echo "  🔗 API Server:             http://localhost:8080"
-    echo "  📊 RabbitMQ Management:    http://localhost:15672 (admin/password123)"
+    echo "  📊 NetQueue Health:        http://localhost:9000/health"
     echo "  🗄️  PostgreSQL:            localhost:5432 (jobexecutor/password123)"
     echo
     print_status "To start with Nginx reverse proxy (production mode):"

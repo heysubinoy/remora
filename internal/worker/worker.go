@@ -88,7 +88,7 @@ func (w *Worker) Start(ctx context.Context) {
 		}(i + 1)
 	}
 
-	// Start consuming jobs from RabbitMQ queue
+	// Start consuming jobs from NetQueue
 	slog.Info("Attempting to start queue consumer")
 	if err := w.queue.StartConsumer(ctx, w.processJobWrapper); err != nil {
 		slog.Error("Failed to start queue consumer", "error", err)

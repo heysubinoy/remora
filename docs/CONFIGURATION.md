@@ -34,32 +34,33 @@ DATABASE_URL="postgres://user:pass@localhost/dbname?sslmode=disable"
 DATABASE_URL="postgresql://user:pass@host:5432/dbname?sslmode=require"
 ```
 
-### RabbitMQ Configuration
+### NetQueue Configuration
 
-| Variable                   | Default                              | Description                       |
-| -------------------------- | ------------------------------------ | --------------------------------- |
-| `RABBITMQ_URL`             | `amqp://guest:guest@localhost:5672/` | RabbitMQ connection URL           |
-| `RABBITMQ_QUEUE_NAME`      | `job-executor-jobs`                  | Job queue name                    |
-| `RABBITMQ_EXCHANGE`        | `job-executor`                       | Exchange name                     |
-| `RABBITMQ_ROUTING_KEY`     | `jobs`                               | Routing key                       |
-| `RABBITMQ_PREFETCH_COUNT`  | `10`                                 | Number of unacknowledged messages |
-| `RABBITMQ_RECONNECT_DELAY` | `5s`                                 | Reconnection delay                |
-| `RABBITMQ_MAX_RETRIES`     | `5`                                  | Maximum retry attempts            |
+| Variable                      | Default          | Description             |
+| ----------------------------- | ---------------- | ----------------------- |
+| `NETQUEUE_ADDR`               | `localhost:9000` | NetQueue server address |
+| `QUEUE_NAME`                  | `job_queue`      | Job queue name          |
+| `QUEUE_PERSISTENCE`           | `true`           | Enable disk persistence |
+| `QUEUE_MAX_SIZE`              | `10000`          | Maximum queue size      |
+| `QUEUE_WORKER_TIMEOUT`        | `300s`           | Worker timeout          |
+| `QUEUE_HEALTH_CHECK_INTERVAL` | `30s`            | Health check frequency  |
 
-#### RabbitMQ URL Examples
+#### NetQueue Configuration Examples
 
 ```bash
 # Local development
-RABBITMQ_URL="amqp://guest:guest@localhost:5672/"
+NETQUEUE_ADDR="localhost:9000"
 
-# With custom user and vhost
-RABBITMQ_URL="amqp://admin:password123@localhost:5672/job-executor"
+# With custom configuration
+NETQUEUE_ADDR="192.168.1.100:9000"
 
-# With TLS
-RABBITMQ_URL="amqps://user:pass@rabbitmq.example.com:5671/vhost"
+# With persistence enabled
+QUEUE_PERSISTENCE="true"
+QUEUE_MAX_SIZE="50000"
 
-# With connection parameters
-RABBITMQ_URL="amqp://user:pass@host:5672/vhost?heartbeat=30&connection_timeout=10"
+# With custom timeouts
+QUEUE_WORKER_TIMEOUT="600s"
+QUEUE_HEALTH_CHECK_INTERVAL="60s"
 ```
 
 ### Worker Configuration
@@ -146,8 +147,8 @@ SERVER_ADDR=:8080
 # Database
 DATABASE_URL=postgres://job_executor:job_password@localhost:5432/job_executor_db
 
-# RabbitMQ
-RABBITMQ_URL=amqp://admin:password123@localhost:5672/job-executor
+# NetQueue
+NETQUEUE_ADDR=localhost:9000
 
 # Worker
 WORKER_CONCURRENCY=5
@@ -180,7 +181,7 @@ SERVER_ADDR=:8080
 
 # Use Docker service names
 DATABASE_URL=postgres://job_executor:job_password@postgres:5432/job_executor_db
-RABBITMQ_URL=amqp://admin:password123@rabbitmq:5672/job-executor
+NETQUEUE_ADDR=netqueue:9000
 
 # Production worker settings
 WORKER_CONCURRENCY=20
@@ -202,7 +203,7 @@ The application validates configuration on startup and will fail fast if require
 ### Required Settings
 
 - `DATABASE_URL` (must be valid connection string)
-- `RABBITMQ_URL` (if queue is enabled)
+- `NETQUEUE_ADDR` (if queue is enabled)
 
 ### Optional Settings
 
@@ -245,7 +246,7 @@ PUT /api/v1/config/worker-concurrency
 ENV=development
 LOG_LEVEL=debug
 DATABASE_URL=./jobs.db
-RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+NETQUEUE_ADDR=localhost:9000
 WORKER_CONCURRENCY=3
 METRICS_ENABLED=true
 ```
@@ -256,7 +257,7 @@ METRICS_ENABLED=true
 ENV=staging
 LOG_LEVEL=info
 DATABASE_URL=postgres://staging_user:pass@staging-db:5432/staging_db
-RABBITMQ_URL=amqp://staging:pass@staging-rabbitmq:5672/staging
+NETQUEUE_ADDR=staging-netqueue:9000
 WORKER_CONCURRENCY=10
 METRICS_ENABLED=true
 RATE_LIMIT_ENABLED=true
@@ -268,7 +269,7 @@ RATE_LIMIT_ENABLED=true
 ENV=production
 LOG_LEVEL=warn
 DATABASE_URL=postgres://prod_user:secure_pass@prod-db:5432/prod_db
-RABBITMQ_URL=amqp://prod:secure_pass@prod-rabbitmq:5672/production
+NETQUEUE_ADDR=prod-netqueue:9000
 WORKER_CONCURRENCY=50
 METRICS_ENABLED=true
 RATE_LIMIT_ENABLED=true
@@ -321,11 +322,11 @@ DATABASE_URL="postgres://user:pass@host:port/dbname"
 psql "$DATABASE_URL" -c "SELECT 1;"
 ```
 
-#### RabbitMQ Connection Errors
+#### NetQueue Connection Errors
 
 ```bash
 # Check URL format
-RABBITMQ_URL="amqp://user:pass@host:port/vhost"
+NETQUEUE_ADDR="host:port"
 
 # Test connection
 curl -u admin:password123 http://localhost:15672/api/overview

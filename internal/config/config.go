@@ -7,11 +7,11 @@ import (
 )
 
 type Config struct {
-	ServerAddr      string
-	DatabaseURL     string
-	RabbitMQURL     string
-	WorkerPoolSize  int
-	SSH             SSHConfig
+	ServerAddr     string
+	DatabaseURL    string
+	NetQueueAddr   string
+	WorkerPoolSize int
+	SSH            SSHConfig
 }
 
 type SSHConfig struct {
@@ -28,7 +28,7 @@ func Load() *Config {
 	// Use multiple workers per CPU core since most time is spent waiting for SSH responses
 	cpuCores := runtime.NumCPU()
 	defaultWorkerPoolSize := cpuCores * 4 // 4 workers per CPU core for I/O-bound tasks
-	
+
 	// Set reasonable bounds
 	if defaultWorkerPoolSize > 50 {
 		defaultWorkerPoolSize = 50 // Cap at 50 workers to avoid excessive resource usage
@@ -45,10 +45,10 @@ func Load() *Config {
 	}
 
 	return &Config{
-		ServerAddr:      getEnv("SERVER_ADDR", ":8080"),
-		DatabaseURL:     getEnv("DATABASE_URL", "./jobs.db"),
-		RabbitMQURL:     getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
-		WorkerPoolSize:  workerPoolSize,
+		ServerAddr:     getEnv("SERVER_ADDR", ":8080"),
+		DatabaseURL:    getEnv("DATABASE_URL", "./jobs.db"),
+		NetQueueAddr:   getEnv("NETQUEUE_ADDR", "localhost:9000"),
+		WorkerPoolSize: workerPoolSize,
 		SSH: SSHConfig{
 			Host:       getEnv("SSH_HOST", "localhost"),
 			Port:       getEnv("SSH_PORT", "22"),

@@ -14,9 +14,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 BASE_URL="${BASE_URL:-http://localhost:8080}"
-RABBITMQ_URL="${RABBITMQ_URL:-http://localhost:15672}"
-RABBITMQ_USER="${RABBITMQ_USER:-admin}"
-RABBITMQ_PASS="${RABBITMQ_PASS:-password123}"
+NETQUEUE_URL="${NETQUEUE_URL:-http://localhost:9000}"
 
 print_header() {
     echo -e "\n${BLUE}=== $1 ===${NC}"
@@ -70,20 +68,20 @@ check_container() {
 main() {
     print_header "Remote Worker Environment Diagnostic"
     echo "Base URL: $BASE_URL"
-    echo "RabbitMQ URL: $RABBITMQ_URL"
+    echo "NetQueue URL: $NETQUEUE_URL"
     echo ""
 
     # 1. Check Docker containers
     print_header "Container Status Check"
     check_container "job-executor-api" || true
     check_container "job-executor-worker" || true
-    check_container "job-executor-rabbitmq" || true
+    check_container "job-executor-netqueue" || true
     check_container "job-executor-postgres" || true
 
     # 2. Check service connectivity
     print_header "Service Connectivity Check"
     check_service "$BASE_URL/health" "API Health Endpoint" || true
-    check_service "$RABBITMQ_URL/api/overview" "RabbitMQ Management" || true
+    check_service "$NETQUEUE_URL/health" "NetQueue Health" || true
 
     # 3. Check API debug endpoints
     print_header "API Debug Information"
@@ -106,15 +104,15 @@ main() {
         print_error "Could not retrieve queue status"
     fi
 
-    # 4. Check RabbitMQ status
-    print_header "RabbitMQ Status Check"
+    # 4. Check NetQueue status
+print_header "NetQueue Status Check"
     
-    print_info "Checking RabbitMQ overview..."
-    if curl -s -u "$RABBITMQ_USER:$RABBITMQ_PASS" "$RABBITMQ_URL/api/overview" > /tmp/rabbitmq_overview.json 2>/dev/null; then
-        echo "RabbitMQ Version: $(cat /tmp/rabbitmq_overview.json | python3 -c "import sys, json; print(json.load(sys.stdin)['rabbitmq_version'])" 2>/dev/null || echo "unknown")"
-        echo "Message Stats: $(cat /tmp/rabbitmq_overview.json | python3 -c "import sys, json; print(json.load(sys.stdin).get('message_stats', {}))" 2>/dev/null || echo "unknown")"
+    print_info "Checking NetQueue status..."
+if curl -s "$NETQUEUE_URL/health" > /tmp/netqueue_health.json 2>/dev/null; then
+        echo "NetQueue Status: $(cat /tmp/netqueue_health.json | python3 -c "import sys, json; print(json.load(sys.stdin).get('status', 'unknown'))" 2>/dev/null || echo "unknown")"
+echo "Queue Stats: $(cat /tmp/netqueue_health.json | python3 -c "import sys, json; print(json.load(sys.stdin).get('stats', {}))" 2>/dev/null || echo "unknown")"
     else
-        print_error "Could not retrieve RabbitMQ overview"
+        print_error "Could not retrieve NetQueue status"
     fi
 
     print_info "Checking RabbitMQ queues..."

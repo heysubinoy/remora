@@ -56,8 +56,8 @@ SERVER_ADDR=":8080"                    # Server bind address
 DATABASE_URL="./jobs.db"               # SQLite default
 DATABASE_URL="postgres://..."          # PostgreSQL connection string
 
-# RabbitMQ
-RABBITMQ_URL="amqp://guest:guest@localhost:5672/"
+# NetQueue
+NETQUEUE_ADDR="localhost:9000"
 
 # Worker Pool
 WORKER_POOL_SIZE=16                    # Auto-calculated based on CPU cores
@@ -121,15 +121,16 @@ export TLS_KEY_FILE=/path/to/key.pem
 export TLS_MIN_VERSION=1.2
 ```
 
-#### RabbitMQ TLS
+#### NetQueue Security
 
 ```bash
-# RabbitMQ TLS configuration
-export RABBITMQ_URL="amqps://user:pass@rabbitmq.example.com:5671/vhost"
+# NetQueue security configuration
+export NETQUEUE_ADDR="localhost:9000"
 
-# Certificate validation
-export RABBITMQ_TLS_VERIFY=true
-export RABBITMQ_CA_CERT=/path/to/ca-cert.pem
+# Certificate validation (if TLS enabled)
+export QUEUE_TLS_ENABLED="true"
+export QUEUE_TLS_CERT="/path/to/cert.pem"
+export QUEUE_TLS_KEY="/path/to/key.pem"
 ```
 
 ### Firewall Configuration
@@ -138,10 +139,9 @@ export RABBITMQ_CA_CERT=/path/to/ca-cert.pem
 # Allow only necessary ports
 sudo ufw allow 22/tcp      # SSH
 sudo ufw allow 443/tcp     # HTTPS API
-sudo ufw allow 5671/tcp    # RabbitMQ TLS
+sudo ufw allow 9000/tcp    # NetQueue
 sudo ufw deny 8080/tcp     # Block direct API access
-sudo ufw deny 5672/tcp     # Block RabbitMQ non-TLS
-sudo ufw deny 15672/tcp    # Block RabbitMQ management
+sudo ufw deny 9001/tcp     # Block NetQueue management (if separate)
 sudo ufw enable
 ```
 
@@ -167,7 +167,7 @@ services:
     networks: [frontend, backend]
   worker:
     networks: [backend]
-  rabbitmq:
+  netqueue:
     networks: [backend]
   postgres:
     networks: [database]

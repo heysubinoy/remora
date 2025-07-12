@@ -30,8 +30,8 @@ COPY --from=builder /app/job-executor-worker .
 # Create data and pem-files directories
 RUN mkdir -p /app/data /app/pem-files
 
-# Environment variables for RabbitMQ and other configurations
-ENV RABBITMQ_URL=""
+# Environment variables for NetQueue and other configurations
+ENV NETQUEUE_ADDR=""
 ENV DATABASE_URL="postgres://jobexecutor:password123@postgres:5432/jobexecutor?sslmode=disable"
 ENV SSH_HOST=""
 ENV SSH_PORT="22"
@@ -45,6 +45,6 @@ ENV WORKER_CONCURRENCY="10"
 RUN echo '#!/bin/sh\npgrep -f job-executor-worker || exit 1' > /health.sh && chmod +x /health.sh
 
 # Add debugging script
-RUN echo '#!/bin/sh\necho "=== Worker Container Debug ==="\necho "Process List:"\nps aux\necho "Network Connections:"\nnetstat -an 2>/dev/null || ss -an\necho "Environment:"\nenv | grep -E "(RABBITMQ|DATABASE|LOG)" | sort\necho "DNS Resolution:"\nnslookup rabbitmq 2>/dev/null || echo "nslookup not available"\nnslookup postgres 2>/dev/null || echo "postgres DNS check skipped"\necho "Connectivity Tests:"\nnc -z rabbitmq 5672 && echo "RabbitMQ: OK" || echo "RabbitMQ: FAIL"\nnc -z postgres 5432 && echo "PostgreSQL: OK" || echo "PostgreSQL: FAIL"' > /debug.sh && chmod +x /debug.sh
+RUN echo '#!/bin/sh\necho "=== Worker Container Debug ==="\necho "Process List:"\nps aux\necho "Network Connections:"\nnetstat -an 2>/dev/null || ss -an\necho "Environment:"\nenv | grep -E "(NETQUEUE|DATABASE|LOG)" | sort\necho "DNS Resolution:"\nnslookup netqueue 2>/dev/null || echo "nslookup not available"\nnslookup postgres 2>/dev/null || echo "postgres DNS check skipped"\necho "Connectivity Tests:"\nnc -z netqueue 9000 && echo "NetQueue: OK" || echo "NetQueue: FAIL"\nnc -z postgres 5432 && echo "PostgreSQL: OK" || echo "PostgreSQL: FAIL"' > /debug.sh && chmod +x /debug.sh
 
 CMD ["./job-executor-worker"]

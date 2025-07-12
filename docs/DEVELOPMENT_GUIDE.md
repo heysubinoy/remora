@@ -23,11 +23,11 @@ cd newremora
 ### 2. Start Development Dependencies
 
 ```bash
-# Start PostgreSQL and RabbitMQ
-docker compose up -d postgres rabbitmq
+# Start PostgreSQL and NetQueue
+docker compose up -d postgres netqueue
 
 # Wait for services to be ready
-docker compose logs -f postgres rabbitmq
+docker compose logs -f postgres netqueue
 ```
 
 ### 3. Environment Configuration
@@ -46,8 +46,8 @@ vim .env
 # Database
 DATABASE_URL=postgres://job_executor:job_password@localhost:5432/job_executor_db
 
-# RabbitMQ
-RABBITMQ_URL=amqp://admin:password123@localhost:5672/job-executor
+# NetQueue
+NETQUEUE_ADDR=localhost:9000
 
 # API Server
 SERVER_ADDR=:8080
@@ -365,17 +365,17 @@ docker compose logs postgres
 pg_dump -h localhost -U job_executor job_executor_db > backup.sql
 ```
 
-### RabbitMQ Debugging
+### NetQueue Debugging
 
 ```bash
 # Access management interface
 # http://localhost:15672 (admin/password123)
 
 # View logs
-docker compose logs rabbitmq
+docker compose logs netqueue
 
 # CLI tools
-docker exec -it rabbitmq rabbitmqctl list_queues
+curl http://localhost:9000/stats
 ```
 
 ## Performance Optimization
@@ -431,17 +431,17 @@ docker compose logs postgres
 docker compose restart postgres
 ```
 
-### RabbitMQ Connection Issues
+### NetQueue Connection Issues
 
 ```bash
-# Check RabbitMQ status
-docker compose ps rabbitmq
+# Check NetQueue status
+docker compose ps netqueue
 
 # View management interface
 open http://localhost:15672
 
-# Reset RabbitMQ
-docker compose restart rabbitmq
+# Reset NetQueue
+docker compose restart netqueue
 ```
 
 ### Build Issues
@@ -501,6 +501,6 @@ cd web && pnpm install --frozen-lockfile
 
 - [Go Documentation](https://golang.org/doc/)
 - [Next.js Documentation](https://nextjs.org/docs)
-- [RabbitMQ Documentation](https://www.rabbitmq.com/documentation.html)
+- [NetQueue Documentation](docs/API_DOCUMENTATION.md#netqueue)
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 - [Docker Documentation](https://docs.docker.com/)
