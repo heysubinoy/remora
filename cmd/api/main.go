@@ -43,22 +43,22 @@ func main() {
 		os.Exit(1)
 	}
 
-// Initialize job queue (NetQueue polyfill)
-var jobQueue *queue.NetQueue
-netqueueAddr := getEnvOrDefault("NETQUEUE_ADDR", "localhost:9000")
-q, err := queue.NewNetQueue(netqueueAddr)
-if err != nil {
-	   slog.Error("Failed to connect to NetQueue server", "error", err, "addr", netqueueAddr)
-	   os.Exit(1)
-}
-jobQueue = q
-defer func() {
-	   if jobQueue != nil {
-			   if closeErr := jobQueue.Close(); closeErr != nil {
-					   slog.Error("Failed to close NetQueue connection", "error", closeErr)
-			   }
-	   }
-}()
+	// Initialize job queue (NetQueue polyfill)
+	var jobQueue *queue.NetQueue
+	netqueueAddr := getEnvOrDefault("NETQUEUE_ADDR", "localhost:9000")
+	q, err := queue.NewNetQueue(netqueueAddr)
+	if err != nil {
+		slog.Error("Failed to connect to NetQueue server", "error", err, "addr", netqueueAddr)
+		os.Exit(1)
+	}
+	jobQueue = q
+	defer func() {
+		if jobQueue != nil {
+			if closeErr := jobQueue.Close(); closeErr != nil {
+				slog.Error("Failed to close NetQueue connection", "error", closeErr)
+			}
+		}
+	}()
 
 	// Initialize storage service
 	storageConfig := &storage.StorageConfig{
@@ -87,10 +87,11 @@ defer func() {
 	// Configure CORS middleware
 	corsConfig := cors.Config{
 		AllowOrigins: []string{
-			"http://localhost:3000",  // Next.js dev server
+			"http://localhost:3000", // Next.js dev server
 			"http://127.0.0.1:3000",
-			"http://localhost:8080",  // Backend server (for web interface)
+			"http://localhost:8080", // Backend server (for web interface)
 			"http://127.0.0.1:8080",
+			"https://remora-six.vercel.app",
 		},
 		AllowMethods: []string{
 			"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS",
@@ -108,7 +109,7 @@ defer func() {
 	router.Use(cors.New(corsConfig))
 
 	// Setup API routes - no worker dependency
-	   api.SetupAPIRoutes(router, db, *jobQueue, storageService, logger)
+	api.SetupAPIRoutes(router, db, *jobQueue, storageService, logger)
 
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,
