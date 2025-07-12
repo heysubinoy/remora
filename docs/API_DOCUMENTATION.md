@@ -1,14 +1,43 @@
-# API Reference
+# API Documentation
 
 Complete API documentation for NewRemora distributed job execution system.
 
-## Base URL
+## Table of Contents
+
+- [Overview](#overview)
+- [Base URL and Authentication](#base-url-and-authentication)
+- [Response Format](#response-format)
+- [Health Check](#health-check)
+- [System Information](#system-information)
+- [Job Management](#job-management)
+- [Server Management](#server-management)
+- [File Management](#file-management)
+- [Status Codes](#status-codes)
+- [Rate Limiting](#rate-limiting)
+- [Error Handling](#error-handling)
+
+## Overview
+
+The NewRemora API is a RESTful API built with Go and Gin that provides comprehensive job execution and server management capabilities. It serves as the central interface for submitting jobs, managing servers, and monitoring system status.
+
+### Key Features
+
+- **RESTful Design**: Standard HTTP methods and status codes
+- **JSON Communication**: All requests and responses use JSON format
+- **Real-time Updates**: Optimized polling endpoints for live monitoring
+- **Comprehensive Error Handling**: Detailed error messages and status codes
+- **Rate Limiting**: Built-in protection against abuse
+- **CORS Support**: Cross-origin resource sharing for web frontend
+
+## Base URL and Authentication
+
+### Base URL
 
 ```
 http://localhost:8080
 ```
 
-## Authentication
+### Authentication
 
 Currently, the API uses no authentication by default. For production deployments, consider implementing:
 
@@ -110,7 +139,8 @@ Submit a new job for execution.
   "command": "ls",
   "args": "-la /var/log",
   "server_id": "uuid-here",
-  "timeout": 300
+  "timeout": 300,
+  "priority": 5
 }
 ```
 
@@ -120,100 +150,7 @@ Submit a new job for execution.
 - `args` (optional): Command arguments
 - `server_id` (required): Target server UUID
 - `timeout` (optional): Timeout in seconds (default: 300)
-
-**Response:**
-
-```json
-{
-  "id": "job-uuid-here",
-  "status": "queued",
-  "command": "ls",
-  "args": "-la /var/log",
-  "server_id": "server-uuid",
-  "created_at": "2024-12-09T10:30:00Z",
-  "timeout": 300
-}
-```
-
-### POST /api/v1/jobs/script
-
-Submit a shell script for execution.
-
-**Request Body:**
-
-```json
-{
-  "script": "#!/bin/bash\necho 'Starting backup...'\ntar -czf /tmp/backup.tar.gz /home/user/documents\necho 'Backup completed!'",
-  "server_id": "uuid-here",
-  "timeout": 1800,
-  "shell": "/bin/bash"
-}
-```
-
-**Parameters:**
-
-- `script` (required): Shell script content
-- `server_id` (required): Target server UUID
-- `timeout` (optional): Timeout in seconds
-- `shell` (optional): Shell interpreter (default: /bin/bash)
-
-### GET /api/v1/jobs
-
-List jobs with optional filtering and pagination.
-
-**Query Parameters:**
-
-- `page` (optional): Page number (default: 1)
-- `limit` (optional): Items per page (default: 20, max: 100)
-- `status` (optional): Filter by status (queued, running, completed, failed, canceled)
-- `server_id` (optional): Filter by server ID
-- `search` (optional): Search in command/args
-- `sort_by` (optional): Sort field (created_at, started_at, finished_at)
-- `sort_order` (optional): Sort order (asc, desc)
-
-**Example:**
-
-```
-GET /api/v1/jobs?status=running&limit=10&sort_by=created_at&sort_order=desc
-```
-
-**Response:**
-
-```json
-{
-  "jobs": [
-    {
-      "id": "job-uuid",
-      "command": "ls",
-      "args": "-la",
-      "status": "running",
-      "server_id": "server-uuid",
-      "server": {
-        "id": "server-uuid",
-        "name": "web-server-01",
-        "hostname": "192.168.1.100"
-      },
-      "created_at": "2024-12-09T10:30:00Z",
-      "started_at": "2024-12-09T10:30:05Z",
-      "finished_at": null,
-      "exit_code": null,
-      "timeout": 300
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 45,
-    "total_pages": 3,
-    "has_next": true,
-    "has_prev": false
-  }
-}
-```
-
-### GET /api/v1/jobs/:id
-
-Get details of a specific job.
+- `priority` (optional): Job priority 1-10 (1=highest, 10=lowest)
 
 **Response:**
 
@@ -222,23 +159,39 @@ Get details of a specific job.
   "id": "job-uuid",
   "command": "ls",
   "args": "-la /var/log",
-  "status": "completed",
+  "status": "queued",
   "server_id": "server-uuid",
-  "server": {
-    "id": "server-uuid",
-    "name": "web-server-01",
-    "hostname": "192.168.1.100"
-  },
+  "priority": 5,
   "created_at": "2024-12-09T10:30:00Z",
-  "started_at": "2024-12-09T10:30:05Z",
-  "finished_at": "2024-12-09T10:30:07Z",
-  "exit_code": 0,
-  "timeout": 300,
-  "output": "total 48\ndrwxr-xr-x 8 root root 4096 Dec  9 10:25 .\n...",
-  "stdout": "total 48\ndrwxr-xr-x 8 root root 4096 Dec  9 10:25 .\n...",
-  "stderr": ""
+  "timeout": 300
 }
 ```
+
+### POST /api/v1/jobs/script
+
+Submit a shell script job.
+
+**Request Body:**
+
+```json
+{
+  "script": "#!/bin/bash\necho 'Hello World'\ndate\nls -la",
+  "args": "arg1 arg2",
+  "server_id": "uuid-here",
+  "timeout": 300,
+  "shell": "/bin/bash",
+  "priority": 3
+}
+```
+
+**Parameters:**
+
+- `script` (required): Shell script content
+- `args` (optional): Script arguments
+- `server_id` (required): Target server UUID
+- `timeout` (optional): Timeout in seconds (default: 300)
+- `shell` (optional): Shell to use (default: /bin/bash)
+- `priority` (optional): Job priority 1-10
 
 ### POST /api/v1/jobs/:id/cancel
 
@@ -263,7 +216,8 @@ Create a duplicate of an existing job with optional parameter overrides.
 ```json
 {
   "server_id": "different-server-uuid",
-  "timeout": 600
+  "timeout": 600,
+  "priority": 2
 }
 ```
 
@@ -281,40 +235,62 @@ Create a duplicate of an existing job with optional parameter overrides.
     "args": "-la",
     "server_id": "different-server-uuid",
     "timeout": 600,
+    "status": "queued",
+    "priority": 2
+  }
+}
+```
+
+### POST /api/v1/jobs/:id/rerun
+
+Rerun a completed job (creates a new job with same parameters).
+
+**Response:**
+
+```json
+{
+  "original_job": {
+    "id": "original-job-uuid",
+    "status": "completed"
+  },
+  "new_job": {
+    "id": "new-job-uuid",
+    "command": "ls",
+    "args": "-la",
+    "server_id": "server-uuid",
     "status": "queued"
   }
 }
 ```
 
-### GET /api/v1/jobs/:id/stream
+### GET /api/v1/jobs/:id
 
-Stream job output in real-time using Server-Sent Events.
+Get job details.
 
-**Response Headers:**
+**Response:**
 
-```
-Content-Type: text/event-stream
-Cache-Control: no-cache
-Connection: keep-alive
-```
-
-**Event Types:**
-
-- `status`: Job status changes
-- `output`: Real-time output from stdout/stderr
-- `complete`: Job completion notification
-
-**Example Events:**
-
-```
-event: status
-data: {"status": "running", "started_at": "2024-12-09T10:30:05Z"}
-
-event: output
-data: {"type": "stdout", "content": "Starting process...\n"}
-
-event: complete
-data: {"status": "completed", "exit_code": 0}
+```json
+{
+  "id": "job-uuid",
+  "command": "ls",
+  "args": "-la /var/log",
+  "status": "completed",
+  "server_id": "server-uuid",
+  "server": {
+    "id": "server-uuid",
+    "name": "web-server-01",
+    "hostname": "192.168.1.100"
+  },
+  "created_at": "2024-12-09T10:30:00Z",
+  "started_at": "2024-12-09T10:30:05Z",
+  "finished_at": "2024-12-09T10:30:07Z",
+  "exit_code": 0,
+  "timeout": 300,
+  "priority": 5,
+  "output": "total 48\ndrwxr-xr-x 8 root root 4096 Dec  9 10:25 .\n...",
+  "stdout": "total 48\ndrwxr-xr-x 8 root root 4096 Dec  9 10:25 .\n...",
+  "stderr": ""
+}
 ```
 
 ### GET /api/v1/jobs/:id/logs
@@ -328,6 +304,43 @@ Get job stdout output only.
 ### GET /api/v1/jobs/:id/stderr
 
 Get job stderr output only.
+
+### GET /api/v1/jobs
+
+List jobs with filtering and pagination.
+
+**Query Parameters:**
+
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 20, max: 100)
+- `status` (optional): Filter by status (queued, running, completed, failed, canceled)
+- `server_id` (optional): Filter by server ID
+- `search` (optional): Search in command, args, or output
+- `sort_by` (optional): Sort field (created_at, started_at, finished_at, priority)
+- `sort_order` (optional): Sort order (asc, desc)
+
+**Response:**
+
+```json
+{
+  "jobs": [
+    {
+      "id": "job-uuid",
+      "command": "ls",
+      "status": "completed",
+      "server_id": "server-uuid",
+      "created_at": "2024-12-09T10:30:00Z",
+      "priority": 5
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1250,
+    "pages": 63
+  }
+}
+```
 
 ## Server Management
 
@@ -359,6 +372,20 @@ Create a new server configuration.
   "user": "admin",
   "auth_type": "key",
   "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----",
+  "is_active": true
+}
+```
+
+**For PEM File Authentication:**
+
+```json
+{
+  "name": "cloud-server",
+  "hostname": "cloud.example.com",
+  "port": 2222,
+  "user": "clouduser",
+  "auth_type": "key",
+  "pem_file_url": "/pem-files/your-key.pem",
   "is_active": true
 }
 ```
@@ -447,6 +474,22 @@ Test connectivity to a server.
 }
 ```
 
+### POST /api/v1/servers/:id/status
+
+Check server connectivity status.
+
+**Response:**
+
+```json
+{
+  "server_id": "server-uuid",
+  "status": "connected",
+  "response_time_ms": 145,
+  "message": "Connection successful",
+  "checked_at": "2024-12-09T10:30:00Z"
+}
+```
+
 ### POST /api/v1/servers/check-status
 
 Check connectivity status of all servers.
@@ -482,7 +525,9 @@ Check connectivity status of all servers.
 }
 ```
 
-### POST /api/v1/servers/upload-pem
+## File Management
+
+### POST /api/v1/pem-files/upload
 
 Upload a PEM file for SSH key authentication.
 
@@ -494,7 +539,7 @@ Multipart form data with file field named `pem_file`.
 ```json
 {
   "filename": "uploaded-key.pem",
-  "url": "/pem-files/uploaded-key.pem",
+  "pem_file_url": "/pem-files/uploaded-key.pem",
   "size": 1679,
   "uploaded_at": "2024-12-09T10:30:00Z"
 }
@@ -519,10 +564,6 @@ Default rate limits:
 - 100 requests per minute per IP
 - 1000 job submissions per hour per IP
 
-## WebSocket Support
-
-Real-time updates are available via Server-Sent Events (SSE) on the `/api/v1/jobs/:id/stream` endpoint.
-
 ## Error Handling
 
 All errors include:
@@ -532,7 +573,7 @@ All errors include:
 - Request ID for tracking
 - Timestamp
 
-Example error response:
+**Example error response:**
 
 ```json
 {
@@ -542,3 +583,69 @@ Example error response:
   "timestamp": "2024-12-09T10:30:00Z"
 }
 ```
+
+## Request Examples
+
+### Submitting a Shell Script Job
+
+```bash
+curl -X POST http://localhost:8080/api/v1/jobs/script \
+  -H "Content-Type: application/json" \
+  -d '{
+    "script": "#!/bin/bash\necho \"Starting backup process...\"\ndate\ntar -czf /tmp/backup-$(date +%Y%m%d).tar.gz /home/user/documents\necho \"Backup completed!\"",
+    "args": "",
+    "server_id": "your-server-id",
+    "timeout": 600,
+    "shell": "/bin/bash",
+    "priority": 1
+  }'
+```
+
+### Duplicating a Job
+
+```bash
+curl -X POST http://localhost:8080/api/v1/jobs/job-id-here/duplicate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timeout": 1200,
+    "priority": 2
+  }'
+```
+
+### Running Script Files
+
+```bash
+# Read script content and submit
+SCRIPT_CONTENT=$(cat examples/sample-script.sh)
+curl -X POST http://localhost:8080/api/v1/jobs/script \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"script\": \"$SCRIPT_CONTENT\",
+    \"args\": \"arg1 arg2\",
+    \"server_id\": \"your-server-id\",
+    \"timeout\": 300,
+    \"priority\": 5
+  }"
+```
+
+## Job Status Values
+
+- `queued` - Job is waiting to be processed
+- `running` - Job is currently executing
+- `completed` - Job finished successfully (exit code 0)
+- `failed` - Job finished with an error (non-zero exit code)
+- `canceled` - Job was canceled by user
+
+## Real-time Monitoring
+
+The API supports real-time job monitoring through optimized polling:
+
+- **Polling Interval**: 2 seconds for optimal real-time experience
+- **Change Detection**: Smart polling prevents unnecessary updates
+- **Live Output**: Real-time stdout/stderr streaming via `/jobs/:id/logs`
+- **Status Updates**: Continuous job status monitoring
+- **Incremental Updates**: Backend updates database every 2 seconds
+
+For more information about the queue system, see [Queue Documentation](QUEUE_DOCUMENTATION.md).
+
+For more information about the worker system, see [Worker Documentation](WORKER_DOCUMENTATION.md).

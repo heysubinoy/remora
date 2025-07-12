@@ -27,6 +27,10 @@ info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
 # Function to extract value from JSON response
 extract_json_value() {
     local json="$1"
@@ -50,13 +54,45 @@ if [[ "$API_RESPONSE" == *"error"* ]] || [ -z "$API_RESPONSE" ]; then
 fi
 success "API is responding"
 
+# Prompt for PEM file
+echo ""
+warning "PEM FILE REQUIREMENT"
+echo "====================="
+echo "This test requires a PEM file for SSH authentication."
+echo ""
+echo "Please ensure you have a PEM file in the current directory."
+echo "The file should be named: test-server.pem"
+echo ""
+echo "If you don't have the file, please:"
+echo "1. Place your PEM file in this directory"
+echo "2. Rename it to 'test-server.pem'"
+echo "3. Ensure it has the correct permissions (chmod 400 test-server.pem)"
+echo ""
+
 # Check if PEM file exists
-if [ ! -f "billa.pem" ]; then
-    error "billa.pem file not found!"
-    error "Please ensure the PEM file exists in the current directory"
+if [ ! -f "test-server.pem" ]; then
+    error "test-server.pem file not found!"
+    echo ""
+    echo "Please create the PEM file:"
+    echo "1. Copy your SSH private key to this directory"
+    echo "2. Rename it to 'test-server.pem'"
+    echo "3. Set permissions: chmod 400 test-server.pem"
+    echo ""
+    echo "Example:"
+    echo "  cp ~/.ssh/my-key.pem ./test-server.pem"
+    echo "  chmod 400 test-server.pem"
+    echo ""
     exit 1
 fi
-success "PEM file found"
+
+# Check PEM file permissions
+if [ "$(stat -c %a test-server.pem 2>/dev/null || stat -f %Lp test-server.pem 2>/dev/null)" != "400" ]; then
+    warning "PEM file permissions should be 400 for security"
+    echo "Setting permissions: chmod 400 test-server.pem"
+    chmod 400 test-server.pem
+fi
+
+success "PEM file found and permissions set correctly"
 
 # Test both authentication methods
 echo ""
@@ -64,7 +100,7 @@ info "Testing authentication methods..."
 
 # Method 1: Upload PEM file and use URL
 info "Method 1: Testing PEM file upload authentication..."
-UPLOAD_RESPONSE=$(curl -s -X POST -F "pem_file=@billa.pem" "$BASE_URL/pem-files/upload")
+UPLOAD_RESPONSE=$(curl -s -X POST -F "pem_file=@test-server.pem" "$BASE_URL/pem-files/upload")
 PEM_URL=$(extract_json_value "$UPLOAD_RESPONSE" "pem_file_url")
 
 if [ -z "$PEM_URL" ]; then
@@ -98,7 +134,7 @@ success "Test server created with PEM URL method"
 info "Method 2: Testing direct private key authentication..."
 
 # Read the private key content
-PRIVATE_KEY_CONTENT=$(cat billa.pem | sed ':a;N;$!ba;s/\n/\\n/g')
+PRIVATE_KEY_CONTENT=$(cat test-server.pem | sed ':a;N;$!ba;s/\n/\\n/g')
 
 # Create test server with direct private key
 SERVER_NAME_2="quick-test-key-$(date +%s)"
